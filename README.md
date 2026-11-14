@@ -16,6 +16,7 @@ It is built for leaving long jobs running (AI coding agents, builds, downloads, 
 
 - **Lid closed, still running.** `pmset -a disablesleep 1` stops lid-close sleep, and `caffeinate -ims` stops idle sleep. The display is allowed to turn off.
 - **Cooling untouched.** Fans, SMC thermal control and CPU/GPU throttling are never changed. macOS cools the Mac exactly as with the lid open.
+- **Sleeps when the agents finish.** With `--until-done` (on by default in the menu bar app), it watches your Claude Code and Codex sessions, background subagents included, and stops once none has been working for 5 minutes (`LIDOCAINE_IDLE_MINUTES`). Then the Mac sleeps. It reads only the sessions' own transcript files on your Mac to see whether a turn is still running; nothing is sent anywhere. `lidocaine agents` shows how many are working, and `lidocaine until-done on|off` switches it for a running session. A time limit still applies on top.
 - **Watchdog.** Every 30 seconds it checks thermal pressure (`powermetrics`), battery temperature and battery level. It stops and puts the Mac to sleep when:
   - thermal pressure reaches Heavy or worse,
   - the battery passes 45 °C (`--max-temp`),

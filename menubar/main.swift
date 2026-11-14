@@ -68,6 +68,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         get { defaults.bool(forKey: "worktree") }
         set { defaults.set(newValue, forKey: "worktree"); objectWillChange.send() }
     }
+    /// Sleep once no Claude Code or Codex session has worked for a few minutes.
+    var untilDone: Bool {
+        get { defaults.bool(forKey: "untilDone") }
+        set { defaults.set(newValue, forKey: "untilDone"); objectWillChange.send() }
+    }
+    func setUntilDone(_ on: Bool) {
+        untilDone = on
+        if isRunning { perform(["until-done", on ? "on" : "off"]) }
+    }
     var lidWasClosed = lidIsClosed()
     var activity: NSObjectProtocol?
     var showTimeInMenuBar: Bool {
@@ -111,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Updating is a chore nobody asked for, so it happens on its own unless switched off.
-        defaults.register(defaults: ["autoUpdate": true, "worktree": true])
+        defaults.register(defaults: ["autoUpdate": true, "worktree": true, "untilDone": true])
         if let id = Bundle.main.bundleIdentifier,
            NSRunningApplication.runningApplications(withBundleIdentifier: id).count > 1 {
             NSApp.terminate(nil)
@@ -495,7 +504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
 
     func turnOn(dir: String?) {
         setBusy(true)
-        let hours = self.hours, lowPower = self.lowPower, worktree = self.worktree
+        let hours = self.hours, lowPower = self.lowPower, worktree = self.worktree, untilDone = self.untilDone
         let quiet = noPassword
         DispatchQueue.global().async {
             var error: String?
@@ -507,6 +516,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
                 }
                 if hours > 0 { args += ["--hours", String(hours)] }
                 if lowPower { args.append("--low-power") }
+                if untilDone { args.append("--until-done") }
                 let r = self.runScript(args)
                 let st = self.fetchState()
                 DispatchQueue.main.async {
@@ -526,6 +536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
                 var args = ["on"]
                 if hours > 0 { args += ["--hours", String(hours)] }
                 if lowPower { args.append("--low-power") }
+                if untilDone { args.append("--until-done") }
                 let r = self.runScriptAsAdmin(args)
                 if r.status != 0 {
                     error = r.output.contains("-128") ? "" : r.output
@@ -680,6 +691,8 @@ struct PanelView: View {
             safetyRow
             Divider()
             VStack(spacing: 8) {
+                switchRow("Sleep when Claude and Codex finish", Binding(get: { app.untilDone }, set: { app.setUntilDone($0) }))
+                    .help("Watches your Claude Code and Codex sessions. When none has been working for \(app.state["idle_minutes"] ?? "5") minutes, it stops and the Mac sleeps. The time limit still applies.")
                 switchRow(app.isRunning ? "Low Power Mode (from next start)" : "Low Power Mode while on",
                           Binding(get: { app.lowPower }, set: { app.lowPower = $0 }))
                 switchRow("New phone chats start from origin/main", Binding(get: { app.worktree }, set: { app.worktree = $0 }))
@@ -763,6 +776,18 @@ struct PanelView: View {
         if app.busy { return "Changing sleep settings" }
         if let stop = batteryStop, app.deadline.map({ stop < $0 }) ?? true {
             return "On battery, sleeps near \(stop.formatted(date: .omitted, time: .shortened)) at \(app.state["min_battery"] ?? "20")%."
+        }
+        if app.isRunning, app.state["until_done"] == "1" {
+            let n = Int(app.state["agents"] ?? "") ?? 0
+            if n > 0 {
+                return "Sleeps when your agents finish (\(n) working). Safe to close the lid."
+            }
+            if let s = TimeInterval(app.state["idle_since"] ?? ""), s > 0,
+               let m = Double(app.state["idle_minutes"] ?? "5") {
+                let at = Date(timeIntervalSince1970: s + m * 60)
+                return "No agent working. Sleeps at \(at.formatted(date: .omitted, time: .shortened)) unless one starts."
+            }
+            return "Sleeps when your agents finish. Safe to close the lid."
         }
         if app.isRunning {
             if let end = app.deadline {

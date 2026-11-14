@@ -10,6 +10,10 @@ LOG=/tmp/lidocaine-watchdog.log
 # The running watchdog re-reads its stop time from here every check, so
 # "lidocaine set-hours" can change the limit of a session that is already on.
 DEADLINE_FILE=/tmp/lidocaine-deadline
+# "1" while the running session stops by itself once no agent has worked for
+# IDLE_MINUTES. "lidocaine until-done on|off" switches it for a running session.
+UNTIL_DONE_FILE=/tmp/lidocaine-until-done
+IDLE_SINCE_FILE=/tmp/lidocaine-idle-since
 SUDOERS_FILE=/etc/sudoers.d/lidocaine
 # Lidocaine was called Insomnia; its no-password rule may still sit under the old name.
 LEGACY_SUDOERS_FILE=/etc/sudoers.d/insomnia
@@ -33,7 +37,7 @@ LIDOCAINE_CONFIG="${LIDOCAINE_CONFIG:-$HOME/.config/lidocaine/config}"
 if [ -f "$LIDOCAINE_CONFIG" ]; then
   while IFS='=' read -r key value; do
     case "$key" in
-      LIDOCAINE_SCHEDULE_IGNORE|LIDOCAINE_CLAUDE_BIN|LIDOCAINE_REMOTE_SPAWN|LIDOCAINE_REMOTE_MAX|LIDOCAINE_REMOTE_MIN_BATTERY) ;;
+      LIDOCAINE_SCHEDULE_IGNORE|LIDOCAINE_IDLE_MINUTES|LIDOCAINE_CLAUDE_BIN|LIDOCAINE_REMOTE_SPAWN|LIDOCAINE_REMOTE_MAX|LIDOCAINE_REMOTE_MIN_BATTERY) ;;
       *) continue ;;
     esac
     [ -n "${!key+set}" ] && continue
@@ -45,6 +49,8 @@ SCHEDULE_IGNORE="${LIDOCAINE_SCHEDULE_IGNORE-}"
 
 INTERVAL=30
 HOURS=0
+UNTIL_DONE=0
+IDLE_MINUTES="${LIDOCAINE_IDLE_MINUTES:-5}"
 MIN_BATTERY=20
 MAX_BATT_TEMP=45
 LOW_POWER=0
@@ -79,6 +85,8 @@ Usage:
                           Only start phone access (no sudo), in each DIR or in
                           all recent Claude folders. Adds to folders already on.
   lidocaine remote-off     Stop phone access in every folder.
+  lidocaine until-done on|off  Switch "sleep when the agents finish" for the running session.
+  lidocaine agents        How many Claude Code and Codex sessions are working right now.
   lidocaine install-nopasswd    One-time: let lidocaine switch without a password
                                (allows only its exact pmset/powermetrics commands).
   lidocaine uninstall-nopasswd  Remove that rule again.
@@ -98,6 +106,10 @@ Usage:
 Options for "on":
   --hours N          Stop after N hours (decimals ok), and stop phone access then too.
                      Default: no limit. Change it later with "lidocaine set-hours".
+  --until-done       Stop and sleep once no Claude Code or Codex session has been
+                     working for 5 minutes (LIDOCAINE_IDLE_MINUTES). Combines with
+                     --hours, which then caps it. Switch it later with
+                     "lidocaine until-done on|off".
   --min-battery P    On battery power, stop and sleep below P%. Default: 20.
   --max-temp C       Stop and sleep if battery temperature exceeds C °C. Default: 45.
   --low-power        Switch to Low Power Mode while running (less heat), restore after.
@@ -371,7 +383,7 @@ cleanup() {
   priv /usr/bin/pmset -a disablesleep 0
   [ -n "$ORIG_PM_BATT" ] && priv /usr/bin/pmset -b powermode "$ORIG_PM_BATT"
   [ -n "$ORIG_PM_AC" ] && priv /usr/bin/pmset -c powermode "$ORIG_PM_AC"
-  rm -f "$PIDFILE" "$DEADLINE_FILE"
+  rm -f "$PIDFILE" "$DEADLINE_FILE" "$UNTIL_DONE_FILE" "$IDLE_SINCE_FILE"
   log "normal sleep restored ($STOP_REASON)"
   if [ "$STOP_PHONE" = 1 ] && remote_pid >/dev/null; then
     stop_remote >/dev/null 2>&1
@@ -401,6 +413,55 @@ check_limits() {
   fi
 }
 
+# How many Claude Code and Codex sessions are in the middle of a turn. Read from
+# their own transcripts, which only sit under the user's home folder: a Claude
+# session is busy while a tool runs or the model is answering (a message waiting
+# for it counts for 5 minutes), not once its last message ended the turn,
+# a Codex session between task_started and task_complete. Background subagents
+# keep transcripts of their own, so they count too. Anything untouched for 30
+# minutes is treated as finished, so a crashed session can't hold the Mac awake.
+agents_busy() {
+  local home
+  home=$(eval echo "~${SUDO_USER:-$USER}")
+  /usr/bin/python3 - "$home" <<'PY' 2>/dev/null || echo 0
+import glob, json, os, sys, time
+home, now, n = sys.argv[1], time.time(), 0
+def recent(pattern):
+    for f in glob.glob(os.path.join(home, pattern), recursive=True):
+        try:
+            if now - os.path.getmtime(f) < 1800: yield f
+        except OSError: pass
+def tail(f, size=262144):
+    with open(f, 'rb') as h:
+        h.seek(0, 2); h.seek(max(0, h.tell() - size))
+        for line in reversed(h.read().splitlines()):
+            try: yield json.loads(line)
+            except ValueError: pass
+def claude_busy(f):
+    for d in tail(f):
+        t = d.get('type')
+        if t == 'assistant':
+            return (d.get('message') or {}).get('stop_reason') not in ('end_turn', 'stop_sequence')
+        if t == 'user':
+            c = (d.get('message') or {}).get('content')
+            text = c if isinstance(c, str) else ' '.join(x.get('text', '') for x in c or [] if isinstance(x, dict))
+            # A message or tool result waiting for the model. A finished background
+            # agent also ends here (on its hand-back's result), so it only counts
+            # while fresh.
+            return not text.lstrip().startswith('[Request interrupted') and now - os.path.getmtime(f) < 300
+    return False
+def codex_busy(f):
+    for d in tail(f):
+        p = d.get('payload') or {}
+        if d.get('type') == 'event_msg' and p.get('type') in ('task_started', 'task_complete', 'turn_aborted'):
+            return p['type'] == 'task_started'
+    return False
+n += sum(claude_busy(f) for f in recent('.claude/projects/**/*.jsonl'))
+n += sum(codex_busy(f) for f in recent('.codex/sessions/**/*.jsonl'))
+print(n)
+PY
+}
+
 parse_opts() {
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -409,6 +470,7 @@ parse_opts() {
       --max-temp) MAX_BATT_TEMP="$2"; shift 2 ;;
       --interval) INTERVAL="$2"; shift 2 ;;
       --low-power) LOW_POWER=1; shift ;;
+      --until-done) UNTIL_DONE=1; shift ;;
       --fg) FOREGROUND=1; shift ;;
       --remote) REMOTE_DIRS="${REMOTE_DIRS:+$REMOTE_DIRS
 }$2"; shift 2 ;;
@@ -488,8 +550,12 @@ run_watchdog() {
   fi
   echo "$deadline" > "$DEADLINE_FILE"
   is_root && chmod 666 "$DEADLINE_FILE"
+  echo "$UNTIL_DONE" > "$UNTIL_DONE_FILE"
+  is_root && chmod 666 "$UNTIL_DONE_FILE"
+  rm -f "$IDLE_SINCE_FILE"
+  local idle_since=0 busy
 
-  log "lidocaine ON (power=$(power_source), battery=$(batt_percent)%, temp=$(batt_temp)°C, thermal=$(thermal_pressure), limit=${HOURS}h, min-battery=${MIN_BATTERY}%, max-temp=${MAX_BATT_TEMP}°C, low-power=$LOW_POWER)"
+  log "lidocaine ON (power=$(power_source), battery=$(batt_percent)%, temp=$(batt_temp)°C, thermal=$(thermal_pressure), limit=${HOURS}h, until-done=$UNTIL_DONE, min-battery=${MIN_BATTERY}%, max-temp=${MAX_BATT_TEMP}°C, low-power=$LOW_POWER)"
   [ -t 1 ] && echo "You can close the lid now. Ctrl+C here, or 'lidocaine off' from any terminal, restores normal sleep."
 
   while :; do
@@ -502,6 +568,20 @@ run_watchdog() {
     case "$deadline" in ''|*[!0-9]*) deadline=0 ;; esac
     if [ "$deadline" -gt 0 ] && [ "$now" -ge "$deadline" ]; then
       STOP_REASON="time limit reached"; SLEEP_AFTER=1; STOP_PHONE=1; exit 0
+    fi
+    if [ "$(cat "$UNTIL_DONE_FILE" 2>/dev/null)" = 1 ]; then
+      busy=$(agents_busy)
+      if [ "${busy:-0}" -gt 0 ]; then
+        idle_since=0
+      elif [ "$idle_since" = 0 ]; then
+        idle_since=$now
+      elif [ $((now - idle_since)) -ge $((IDLE_MINUTES * 60)) ]; then
+        STOP_REASON="agents finished"; SLEEP_AFTER=1; STOP_PHONE=1; exit 0
+      fi
+      echo "$idle_since" > "$IDLE_SINCE_FILE"
+    else
+      idle_since=0
+      rm -f "$IDLE_SINCE_FILE"
     fi
     if [ "$(sleep_disabled)" != 1 ]; then
       priv /usr/bin/pmset -a disablesleep 1
@@ -899,6 +979,12 @@ cmd_state() {
     echo "deadline=$(session_deadline)"
     [ -f "$DEADLINE_FILE" ] || echo "deadline_fixed=1"
     echo "started=$(session_start)"
+    if [ "$(cat "$UNTIL_DONE_FILE" 2>/dev/null)" = 1 ]; then
+      echo "until_done=1"
+      echo "idle_minutes=$IDLE_MINUTES"
+      echo "idle_since=$(cat "$IDLE_SINCE_FILE" 2>/dev/null)"
+      echo "agents=$(agents_busy)"
+    fi
   else
     echo "running=0"
     echo "last_stop=$(tail -n 30 "$LOG" 2>/dev/null | sed -n 's/^[0-9-]* \([0-9][0-9]:[0-9][0-9]\):[0-9][0-9] normal sleep restored (\(.*\))$/\1|\2/p' | tail -1)"
@@ -967,6 +1053,12 @@ case "${1:-}" in
   allow-schedules) cmd_allow_schedules ;;
   update) cmd_update "${2:-}" ;;
   migrate) cmd_migrate ;;
+  agents) agents_busy ;;
+  until-done)
+    case "${2:-}" in on) v=1 ;; off) v=0 ;; *) echo "Usage: lidocaine until-done on|off" >&2; exit 2 ;; esac
+    running_pid >/dev/null || { echo "Lidocaine is off; use: lidocaine on --until-done" >&2; exit 1; }
+    echo "$v" > "$UNTIL_DONE_FILE"
+    if [ "$v" = 1 ]; then echo "Sleeps $IDLE_MINUTES minutes after the last agent finishes."; else echo "Agent watching off; the time limit decides."; fi ;;
   -h|--help|help|"") usage ;;
   *) echo "Unknown command: $1" >&2; usage; exit 2 ;;
 esac; exit
