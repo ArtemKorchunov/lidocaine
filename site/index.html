@@ -226,6 +226,14 @@ nav .links a:hover{color:var(--ink);background:rgba(255,255,255,.08)}
 
 /* ---------- sections ---------- */
 section{padding:120px 0 0}
+/* Two short reasons under the hero */
+.why-strip{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:880px;margin:34px auto 0;text-align:left}
+.why-strip .glass{padding:16px 18px;border-radius:16px}
+.why-strip b{display:block;font-size:22px;font-weight:700;color:var(--spark);letter-spacing:-.01em;margin-bottom:4px}
+.why-strip p{margin:0;color:var(--ink-2);font-size:14.5px;line-height:1.5}
+.why-strip q{color:var(--ink)}
+@media (max-width:640px){.why-strip{grid-template-columns:1fr}}
+
 /* Comparison with the other lid-closed tools */
 .cmp{margin-top:36px;padding:0;overflow:hidden}
 .cmp .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -381,7 +389,7 @@ footer a{color:var(--ink-2)}
 <main id="top">
 <div class="wrap">
   <header class="hero">
-    <h1>Let Claude pull the all-nighter.<br>You go to bed.</h1>
+    <h1>Close the lid.<br>Claude keeps working.</h1>
     <p class="lede">A free menu bar app that keeps your MacBook working with the lid closed, so Claude Code finishes overnight. When your agents are done, or the Mac gets too hot or too low, it goes to sleep by itself. Check on your sessions from your phone.</p>
     <div class="cmd glass">
       <span class="p" aria-hidden="true">$</span>
@@ -389,6 +397,10 @@ footer a{color:var(--ink-2)}
       <button class="btn btn-primary" data-copy="git clone https://github.com/ArtemKorchunov/lidocaine.git ~/lidocaine && cd ~/lidocaine && ./install.sh">Copy</button>
     </div>
     <p class="fine">Paste it into Terminal. No admin password to install · macOS 13+ · Free and open source · <a href="https://github.com/ArtemKorchunov/lidocaine">Read the code on GitHub</a></p>
+    <div class="why-strip">
+      <div class="glass"><b>240 times</b><p>On my Mac, Claude Code stopped with <q>Your computer went to sleep mid-response.</q> Each one was a run that never finished.</p></div>
+      <div class="glass"><b>Your plan resets while you sleep</b><p>Claude's usage limits refresh every few hours, nights included. Run the heavy jobs overnight and keep your daytime usage for the work you do yourself.</p></div>
+    </div>
   </header>
 
   <!-- A Mac at night. The panel below is the real app's panel, rebuilt so you can use it here. -->
