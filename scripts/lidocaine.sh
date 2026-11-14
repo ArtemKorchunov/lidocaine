@@ -14,6 +14,9 @@ DEADLINE_FILE=/tmp/lidocaine-deadline
 # IDLE_MINUTES. "lidocaine until-done on|off" switches it for a running session.
 UNTIL_DONE_FILE=/tmp/lidocaine-until-done
 IDLE_SINCE_FILE=/tmp/lidocaine-idle-since
+# What the agents did during the last session, written when it stops; the app
+# shows it once you are back ("lidocaine report" prints it).
+REPORT_FILE=/tmp/lidocaine-report
 SUDOERS_FILE=/etc/sudoers.d/lidocaine
 # Lidocaine was called Insomnia; its no-password rule may still sit under the old name.
 LEGACY_SUDOERS_FILE=/etc/sudoers.d/insomnia
@@ -87,6 +90,8 @@ Usage:
   lidocaine remote-off     Stop phone access in every folder.
   lidocaine until-done on|off  Switch "sleep when the agents finish" for the running session.
   lidocaine agents        How many Claude Code and Codex sessions are working right now.
+  lidocaine report [START [STOP]]  What the agents did in the last session (or between
+                          two epoch times): sessions, work time, tokens, limit hits.
   lidocaine install-nopasswd    One-time: let lidocaine switch without a password
                                (allows only its exact pmset/powermetrics commands).
   lidocaine uninstall-nopasswd  Remove that rule again.
@@ -385,6 +390,11 @@ cleanup() {
   [ -n "$ORIG_PM_AC" ] && priv /usr/bin/pmset -c powermode "$ORIG_PM_AC"
   rm -f "$PIDFILE" "$DEADLINE_FILE" "$UNTIL_DONE_FILE" "$IDLE_SINCE_FILE"
   log "normal sleep restored ($STOP_REASON)"
+  if [ -n "${SESSION_START:-}" ]; then
+    { echo "start=$SESSION_START"; echo "stop=$(date +%s)"; echo "reason=$STOP_REASON"
+      session_report "$SESSION_START" "$(date +%s)"; } > "$REPORT_FILE" 2>/dev/null
+    chmod 644 "$REPORT_FILE" 2>/dev/null
+  fi
   if [ "$STOP_PHONE" = 1 ] && remote_pid >/dev/null; then
     stop_remote >/dev/null 2>&1
     log "phone access stopped too"
@@ -460,6 +470,81 @@ n += sum(claude_busy(f) for f in recent('.claude/projects/**/*.jsonl'))
 n += sum(codex_busy(f) for f in recent('.codex/sessions/**/*.jsonl'))
 print(n)
 PY
+}
+
+# What Claude Code and Codex did between two times (epoch seconds), from their
+# transcripts: sessions that worked, work time (activity with gaps under 5
+# minutes counts as continuous, overlapping sessions count once), tokens
+# (input, cache writes and output; cache reads are left out, they're cheap and
+# huge), and the first usage-limit error, if one stopped an agent.
+session_report() {
+  local home
+  home=$(eval echo "~${SUDO_USER:-$USER}")
+  /usr/bin/python3 - "$home" "$1" "$2" <<'PY' 2>/dev/null
+import glob, json, os, re, sys
+from datetime import datetime
+home, start, stop = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
+def ts(d):
+    try: return datetime.fromisoformat(d['timestamp'].replace('Z', '+00:00')).timestamp()
+    except Exception: return None
+def files(pattern):
+    for f in glob.glob(os.path.join(home, pattern), recursive=True):
+        try:
+            if os.path.getmtime(f) >= start: yield f
+        except OSError: pass
+times, agents, subagents, tokens, limit = [], 0, 0, 0, None
+for f in files('.claude/projects/**/*.jsonl'):
+    worked = False
+    for line in open(f, 'rb'):
+        try: d = json.loads(line)
+        except ValueError: continue
+        t = ts(d)
+        if t is None or not start <= t <= stop or d.get('type') != 'assistant': continue
+        m = d.get('message') or {}
+        if d.get('isApiErrorMessage'):
+            text = ' '.join(x.get('text', '') for x in m.get('content') or [] if isinstance(x, dict))
+            if limit is None and (d.get('error') == 'rate_limit' or re.search(r'limit.*reset', text, re.I)):
+                limit = (t, text.replace('API Error:', '').strip()[:140])
+            continue
+        if m.get('model') == '<synthetic>': continue
+        worked = True
+        times.append(t)
+        u = m.get('usage') or {}
+        tokens += sum(u.get(k) or 0 for k in ('input_tokens', 'cache_creation_input_tokens', 'output_tokens'))
+    if worked:
+        if '/subagents/' in f: subagents += 1
+        else: agents += 1
+for f in files('.codex/sessions/**/*.jsonl'):
+    worked = False
+    for line in open(f, 'rb'):
+        try: d = json.loads(line)
+        except ValueError: continue
+        t = ts(d)
+        if t is None or not start <= t <= stop: continue
+        p = d.get('payload') or {}
+        if d.get('type') == 'response_item' and p.get('role') == 'assistant':
+            worked = True; times.append(t)
+        if p.get('type') == 'token_count':
+            u = ((p.get('info') or {}).get('last_token_usage')) or {}
+            tokens += u.get('total_tokens') or 0
+    if worked: agents += 1
+work, prev, begin = 0, None, None
+for t in sorted(times):
+    if prev is None or t - prev > 300:
+        if begin is not None: work += prev - begin
+        begin = t
+    prev = t
+if begin is not None: work += prev - begin
+print(f'agents={agents}'); print(f'subagents={subagents}')
+print(f'work_minutes={int(work // 60)}'); print(f'tokens={tokens}')
+if limit: print(f'limit_at={int(limit[0])}'); print(f'limit_text={limit[1]}')
+PY
+}
+
+cmd_report() {
+  if [ -n "${1:-}" ]; then session_report "$1" "${2:-$(date +%s)}"; return; fi
+  [ -f "$REPORT_FILE" ] || { echo "No session report yet; one is written when a session stops." >&2; return 1; }
+  cat "$REPORT_FILE"
 }
 
 parse_opts() {
@@ -544,6 +629,7 @@ run_watchdog() {
 
   local start deadline now reason beat=0
   start=$(date +%s)
+  SESSION_START=$start
   deadline=0
   if [ "$HOURS" != 0 ]; then
     deadline=$(awk -v s="$start" -v h="$HOURS" 'BEGIN{printf "%d", s + h*3600}')
@@ -1054,6 +1140,7 @@ case "${1:-}" in
   update) cmd_update "${2:-}" ;;
   migrate) cmd_migrate ;;
   agents) agents_busy ;;
+  report) cmd_report "${2:-}" "${3:-}" ;;
   until-done)
     case "${2:-}" in on) v=1 ;; off) v=0 ;; *) echo "Usage: lidocaine until-done on|off" >&2; exit 2 ;; esac
     running_pid >/dev/null || { echo "Lidocaine is off; use: lidocaine on --until-done" >&2; exit 1; }

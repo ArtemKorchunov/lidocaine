@@ -336,8 +336,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
                 self.state = st
                 self.now = Date()
                 self.updateIcon()
+                self.showReportIfReady()
             }
         }
+    }
+
+    /// Once you are back (lid open), say what the agents did while the last
+    /// session ran: the morning report. Only for sessions of 15 minutes or more in
+    /// which an agent worked, and only once per session.
+    func showReportIfReady() {
+        guard !lidIsClosed(),
+              let text = try? String(contentsOfFile: "/tmp/lidocaine-report", encoding: .utf8) else { return }
+        var r: [String: String] = [:]
+        for line in text.split(separator: "\n") {
+            let kv = line.split(separator: "=", maxSplits: 1).map(String.init)
+            if kv.count == 2 { r[kv[0]] = kv[1] }
+        }
+        guard let stopText = r["stop"], defaults.string(forKey: "reportShown") != stopText else { return }
+        defaults.set(stopText, forKey: "reportShown")
+        let start = Double(r["start"] ?? "") ?? 0, stop = Double(stopText) ?? 0
+        let agents = Int(r["agents"] ?? "") ?? 0, subagents = Int(r["subagents"] ?? "") ?? 0
+        guard stop - start >= 15 * 60, agents + subagents > 0 else { return }
+        let minutes = Int(r["work_minutes"] ?? "") ?? 0
+        let work = minutes >= 60 ? "\(minutes / 60) h \(minutes % 60) min" : "\(minutes) min"
+        let tokens = Double(r["tokens"] ?? "") ?? 0
+        let tok = tokens >= 1_000_000 ? String(format: "%.1fM", tokens / 1_000_000)
+                : tokens >= 1_000 ? "\(Int(tokens / 1_000))K" : "\(Int(tokens))"
+        var body = "\(agents) agent\(agents == 1 ? "" : "s")"
+        if subagents > 0 { body += " and \(subagents) subagent\(subagents == 1 ? "" : "s")" }
+        body += " worked \(work), \(tok) tokens."
+        if let at = Double(r["limit_at"] ?? "") {
+            body += " Hit the usage limit at \(Date(timeIntervalSince1970: at).formatted(date: .omitted, time: .shortened))."
+        }
+        let end = Date(timeIntervalSince1970: stop).formatted(date: .omitted, time: .shortened)
+        body += " Stopped at \(end): \(r["reason"] ?? "off")."
+        notify(title: "While you were away", body: body)
     }
 
     func updateIcon() {
