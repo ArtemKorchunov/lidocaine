@@ -84,7 +84,7 @@ func sparkPath(center: NSPoint, radius: CGFloat) -> NSBezierPath {
 }
 
 let sparkMask: NSImage? = {
-    if let path = ProcessInfo.processInfo.environment["INSOMNIA_SPARK"], let img = NSImage(contentsOfFile: path) { return img }
+    if let path = ProcessInfo.processInfo.environment["LIDOCAINE_SPARK"], let img = NSImage(contentsOfFile: path) { return img }
     if let url = Bundle.main.url(forResource: "claude-spark", withExtension: "png"), let img = NSImage(contentsOf: url) { return img }
     return nil
 }()

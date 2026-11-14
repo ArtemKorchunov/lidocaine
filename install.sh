@@ -12,25 +12,25 @@ for arg in "$@"; do
     --skill) WITH_SKILL=1 ;;
     -h|--help)
       echo "Usage: ./install.sh [--no-app] [--skill]"
-      echo "  --no-app   only install the insomnia command, skip the menu bar app"
-      echo "  --skill    also install the Claude Code skill into ~/.claude/skills/insomnia"
+      echo "  --no-app   only install the lidocaine command, skip the menu bar app"
+      echo "  --skill    also install the Claude Code skill into ~/.claude/skills/lidocaine"
       exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
 
-[ "$(uname -s)" = Darwin ] || { echo "Insomnia only runs on macOS." >&2; exit 1; }
+[ "$(uname -s)" = Darwin ] || { echo "Lidocaine only runs on macOS." >&2; exit 1; }
 
-chmod +x "$REPO/scripts/insomnia.sh" "$REPO/menubar/build.sh"
+chmod +x "$REPO/scripts/lidocaine.sh" "$REPO/menubar/build.sh"
 mkdir -p "$BIN_DIR"
-ln -sf "$REPO/scripts/insomnia.sh" "$BIN_DIR/insomnia"
-echo "Installed command: $BIN_DIR/insomnia -> $REPO/scripts/insomnia.sh"
+ln -sf "$REPO/scripts/lidocaine.sh" "$BIN_DIR/lidocaine"
+echo "Installed command: $BIN_DIR/lidocaine -> $REPO/scripts/lidocaine.sh"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Note: $BIN_DIR is not on your PATH. Add this to ~/.zshrc:  export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
 esac
 
-"$REPO/scripts/insomnia.sh" heal-agent install
+"$REPO/scripts/lidocaine.sh" heal-agent install
 
 if [ "$WITH_APP" = 1 ]; then
   if ! command -v swiftc >/dev/null 2>&1; then
@@ -42,18 +42,18 @@ fi
 
 if [ "$WITH_SKILL" = 1 ]; then
   mkdir -p "$HOME/.claude/skills"
-  rm -rf "$HOME/.claude/skills/insomnia"
-  ln -s "$REPO/claude-skill" "$HOME/.claude/skills/insomnia"
-  echo "Installed Claude Code skill: ~/.claude/skills/insomnia"
+  rm -rf "$HOME/.claude/skills/lidocaine"
+  ln -s "$REPO/claude-skill" "$HOME/.claude/skills/lidocaine"
+  echo "Installed Claude Code skill: ~/.claude/skills/lidocaine"
 fi
 
 cat <<EOF
 
 Done. Next steps:
-  insomnia status                 check that it works
-  insomnia on                     keep the Mac awake with the lid closed
-  insomnia off                    normal sleep again
+  lidocaine status                 check that it works
+  lidocaine on                     keep the Mac awake with the lid closed
+  lidocaine off                    normal sleep again
 
 Optional, one time:
-  insomnia install-nopasswd       switch without a password (allows only insomnia's exact pmset/powermetrics commands)
+  lidocaine install-nopasswd       switch without a password (allows only lidocaine's exact pmset/powermetrics commands)
 EOF

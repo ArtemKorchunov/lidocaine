@@ -20,7 +20,7 @@ Researched October 2026 for 14/16-inch Apple Silicon MacBook Pros (with fans). B
 
 ## Other risks
 - `disablesleep` is undocumented (it's not in `man pmset`) and unsupported. Apple's supported route is clamshell mode with power, an external display and an external keyboard.
-- The biggest real risk is sleep left disabled by mistake, then the Mac goes into a bag and never sleeps. That's why the script restores sleep on every exit and `insomnia status` warns about a leftover setting.
+- The biggest real risk is sleep left disabled by mistake, then the Mac goes into a bag and never sleeps. That's why the script restores sleep on every exit and `lidocaine status` warns about a leftover setting.
 - A MacBook Air has no fan, so closing it costs more performance, but its thermal limits still protect it.
 
 ## Thresholds the watchdog uses

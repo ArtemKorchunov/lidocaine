@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Insomnia for Mac</title>
-<meta name="description" content="Keep your MacBook working with the lid closed, reach Claude Code from your phone, and let a watchdog put it to sleep when it gets hot, low or late.">
+<title>Lidocaine for Mac: keep your MacBook awake with the lid closed</title>
+<meta name="description" content="Lidocaine numbs your MacBook&#39;s lid: keep it working with the lid closed, reach Claude Code from your phone, and let a watchdog put it to sleep when it gets hot, low or late.">
 <link rel="icon" href="img/app-icon.png">
 <style>
 :root{
@@ -342,12 +342,12 @@ footer a{color:var(--ink-2)}
 
 <nav>
   <div class="bar glass">
-    <a class="brand" href="#top"><img src="img/app-icon.png" alt="">Insomnia</a>
+    <a class="brand" href="#top"><img src="img/app-icon.png" alt="">Lidocaine</a>
     <div class="links">
       <a href="#evening">How it works</a>
       <a href="#safety">Safety</a>
       <a href="#install">Install</a>
-      <a class="gh" href="https://github.com/ArtemKorchunov/insomnia">GitHub</a>
+      <a class="gh" href="https://github.com/ArtemKorchunov/lidocaine">GitHub</a>
     </div>
   </div>
 </nav>
@@ -359,10 +359,10 @@ footer a{color:var(--ink-2)}
     <p class="lede">A free menu bar app that keeps your MacBook running with the lid shut, lets you reach Claude Code from your phone, and puts the Mac to sleep by itself when it gets too hot, too low or too late.</p>
     <div class="cmd glass">
       <span class="p" aria-hidden="true">$</span>
-      <code id="heroCmd">git clone https://github.com/ArtemKorchunov/insomnia.git ~/insomnia &amp;&amp; cd ~/insomnia &amp;&amp; ./install.sh</code>
-      <button class="btn btn-primary" data-copy="git clone https://github.com/ArtemKorchunov/insomnia.git ~/insomnia && cd ~/insomnia && ./install.sh">Copy</button>
+      <code id="heroCmd">git clone https://github.com/ArtemKorchunov/lidocaine.git ~/lidocaine &amp;&amp; cd ~/lidocaine &amp;&amp; ./install.sh</code>
+      <button class="btn btn-primary" data-copy="git clone https://github.com/ArtemKorchunov/lidocaine.git ~/lidocaine && cd ~/lidocaine && ./install.sh">Copy</button>
     </div>
-    <p class="fine">Paste it into Terminal. No admin password to install · macOS 13+ · Free and open source · <a href="https://github.com/ArtemKorchunov/insomnia">Read the code on GitHub</a></p>
+    <p class="fine">Paste it into Terminal. No admin password to install · macOS 13+ · Free and open source · <a href="https://github.com/ArtemKorchunov/lidocaine">Read the code on GitHub</a></p>
   </header>
 
   <!-- A Mac at night. The panel below is the real app's panel, rebuilt so you can use it here. -->
@@ -373,12 +373,12 @@ footer a{color:var(--ink-2)}
       <svg class="apple" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M16.4 12.6c0-2.5 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.3.8 1.4 0 2.3-1.2 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.8-1.1-2.8-4.2zM13.9 5.1c.7-.9 1.2-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"/></svg>
       <span><b>Terminal</b></span><span class="mi">Shell</span><span class="mi">Edit</span><span class="mi">View</span>
       <div class="right">
-        <button class="mb-eye open" id="mbEye" aria-label="Insomnia menu" aria-expanded="true"><i></i><span id="mbTime"></span></button>
+        <button class="mb-eye open" id="mbEye" aria-label="Lidocaine menu" aria-expanded="true"><i></i><span id="mbTime"></span></button>
         <span id="mbClock">22:40</span>
       </div>
     </div>
 
-    <div class="panel glass refract" id="panel" role="dialog" aria-label="Insomnia panel">
+    <div class="panel glass refract" id="panel" role="dialog" aria-label="Lidocaine panel">
       <div class="arrow" id="arrow"></div>
       <div class="p-hero">
         <div class="ring" aria-hidden="true">
@@ -466,12 +466,12 @@ footer a{color:var(--ink-2)}
       <article class="alt glass"><h3><code>caffeinate</code> or a keep-awake app</h3><p class="works">Stops the Mac from sleeping when idle.</p><p class="breaks">Closing the lid still puts it to sleep, unless an external display is plugged in.</p></article>
       <article class="alt glass"><h3><code>sudo pmset disablesleep 1</code></h3><p class="works">Really keeps it awake with the lid closed.</p><p class="breaks">Nothing ever turns it back on. One night in a bag and it's hot and empty.</p></article>
     </div>
-    <div class="fix glass"><img src="img/app-icon.png" alt=""><span><b>Insomnia uses the third one</b>, and adds what it lacks: a watchdog that turns sleep back on when it's too hot, too low or too late, even after a crash.</span></div>
+    <div class="fix glass"><img src="img/app-icon.png" alt=""><span><b>Lidocaine uses the third one</b>, and adds what it lacks: a watchdog that turns sleep back on when it's too hot, too low or too late, even after a crash.</span></div>
   </section>
 </div>
 <div class="wrap">
   <section id="evening">
-    <p class="kicker">One evening with Insomnia</p>
+    <p class="kicker">One evening with Lidocaine</p>
     <h2>Start it before bed. Check on it from bed.</h2>
     <p class="sub">A long agent run shouldn't stop because you closed the laptop, and it shouldn't stay awake all night because you forgot about it.</p>
     <div class="timeline">
@@ -503,7 +503,7 @@ footer a{color:var(--ink-2)}
     <div class="real">
       <div class="real-copy">
         <h3>This page was built on a closed MacBook.</h3>
-        <p>These lines are from Insomnia's own log on the Mac that ran the Claude Code session writing this site, on 6 November 2026. The lid closed at 17:32 and the work kept going on battery.</p>
+        <p>These lines are from Lidocaine's own log on the Mac that ran the Claude Code session writing this site, on 6 November 2026. The lid closed at 17:32 and the work kept going on battery.</p>
         <dl class="facts">
           <div><dt>Lid closed</dt><dd>2 h 46 min</dd></div>
           <div><dt>Battery temp</dt><dd>30.3–30.7 °C</dd></div>
@@ -512,8 +512,8 @@ footer a{color:var(--ink-2)}
         </dl>
       </div>
       <div class="term glass">
-        <div class="top"><i></i><i></i><i></i><span>/tmp/insomnia-watchdog.log</span></div>
-<pre>16:40:39 <b class="on">insomnia ON</b> (power=battery, battery=100%, temp=30.1°C, thermal=Nominal)
+        <div class="top"><i></i><i></i><i></i><span>/tmp/lidocaine-watchdog.log</span></div>
+<pre>16:40:39 <b class="on">lidocaine ON</b> (power=battery, battery=100%, temp=30.1°C, thermal=Nominal)
 16:41:05 time limit set: stops at 00:41
 17:21:45 heartbeat: lid=open power=battery battery=95% temp=30.3°C thermal=Nominal
 17:32:09 heartbeat: <b class="lidc">lid=closed</b> power=battery battery=93% temp=30.3°C thermal=Nominal
@@ -527,7 +527,7 @@ footer a{color:var(--ink-2)}
   <section id="safety">
     <p class="kicker">Safety</p>
     <h2>It always gives sleep back.</h2>
-    <p class="sub">A closed laptop in a bag is the worry. Insomnia checks every 30 seconds and puts the Mac to sleep as soon as any limit trips.</p>
+    <p class="sub">A closed laptop in a bag is the worry. Lidocaine checks every 30 seconds and puts the Mac to sleep as soon as any limit trips.</p>
     <div class="safety">
       <div class="gauges glass">
         <div class="gauge"><span class="name">Thermal pressure</span><span class="lim">Heavy</span><b class="meter"><b style="--v:28%"></b></b><span class="why">Read from macOS with powermetrics. Heavy or worse means sleep now.</span></div>
@@ -536,10 +536,10 @@ footer a{color:var(--ink-2)}
         <div class="gauge"><span class="name">Your time limit</span><span class="lim">1–12 h</span><b class="meter"><b style="--v:55%"></b></b><span class="why">Change it while it runs, or add an hour. Phone access stops with it.</span></div>
       </div>
       <div class="promises">
-        <div class="promise glass"><h3>Cooling is never touched</h3><p>Fans, SMC thermal control and CPU throttling work exactly as with the lid open. Insomnia only stops the lid and idle from putting the Mac to sleep.</p></div>
+        <div class="promise glass"><h3>Cooling is never touched</h3><p>Fans, SMC thermal control and CPU throttling work exactly as with the lid open. Lidocaine only stops the lid and idle from putting the Mac to sleep.</p></div>
         <div class="promise glass"><h3>Even a crash can't leave sleep off</h3><p>A small login agent checks every minute. If sleep is still off with nothing watching it, after a <code>kill -9</code> or a reboot, it turns sleep back on.</p></div>
         <div class="promise glass"><h3>Phone access opens no ports</h3><p>It uses Claude Code's own Remote Control, which <a href="https://code.claude.com/docs/en/remote-control">only makes outbound HTTPS requests</a> and never listens for connections on your Mac. You reach it through your own Claude account.</p></div>
-        <div class="promise glass"><h3>Passwordless only for what it runs</h3><p>An optional rule allows just the exact <code>pmset</code> and <code>powermetrics</code> commands Insomnia uses, checked with visudo. The script itself never gets root.</p></div>
+        <div class="promise glass"><h3>Passwordless only for what it runs</h3><p>An optional rule allows just the exact <code>pmset</code> and <code>powermetrics</code> commands Lidocaine uses, checked with visudo. The script itself never gets root.</p></div>
       </div>
     </div>
   </section>
@@ -549,7 +549,7 @@ footer a{color:var(--ink-2)}
     <h2>Three lines in Terminal.</h2>
     <div class="install">
       <div>
-        <p class="sub" style="margin-top:0">It installs the <code style="font:15px var(--mono);color:var(--silver)">insomnia</code> command and builds the menu bar app into your Applications folder. Updates come from GitHub with one click in the panel, or automatically.</p>
+        <p class="sub" style="margin-top:0">It installs the <code style="font:15px var(--mono);color:var(--silver)">lidocaine</code> command and builds the menu bar app into your Applications folder. Updates come from GitHub with one click in the panel, or automatically.</p>
         <ul class="reqs">
           <li>macOS 13 or newer on a MacBook, tested on Apple Silicon</li>
           <li>Xcode Command Line Tools for the menu bar app</li>
@@ -558,13 +558,13 @@ footer a{color:var(--ink-2)}
       </div>
       <div class="term glass">
         <div class="top"><i></i><i></i><i></i><span>Terminal</span></div>
-<pre><span class="p">$ </span>git clone https://github.com/ArtemKorchunov/insomnia.git ~/insomnia
-<span class="p">$ </span>cd ~/insomnia
+<pre><span class="p">$ </span>git clone https://github.com/ArtemKorchunov/lidocaine.git ~/lidocaine
+<span class="p">$ </span>cd ~/lidocaine
 <span class="p">$ </span>./install.sh
 <span class="c"># later, from anywhere</span>
-<span class="p">$ </span>insomnia on --hours 4 --remote all
-<span class="p">$ </span>insomnia update</pre>
-        <div class="copy"><button class="btn btn-glass" data-copy="git clone https://github.com/ArtemKorchunov/insomnia.git ~/insomnia && cd ~/insomnia && ./install.sh">Copy the install command</button></div>
+<span class="p">$ </span>lidocaine on --hours 4 --remote all
+<span class="p">$ </span>lidocaine update</pre>
+        <div class="copy"><button class="btn btn-glass" data-copy="git clone https://github.com/ArtemKorchunov/lidocaine.git ~/lidocaine && cd ~/lidocaine && ./install.sh">Copy the install command</button></div>
       </div>
     </div>
   </section>
@@ -573,10 +573,10 @@ footer a{color:var(--ink-2)}
     <p class="kicker">Questions</p>
     <h2>Before you close the lid.</h2>
     <div class="faq">
-      <details><summary>Is it safe to run a MacBook with the lid closed?</summary><p>macOS keeps cooling it the same way, through the keyboard deck instead of the screen. Insomnia adds the limits macOS doesn't have for this case: it sleeps the Mac on Heavy thermal pressure, a battery above 45 °C, or a charge under 20% on battery. Keep it on a desk or a stand, not in a bag.</p></details>
+      <details><summary>Is it safe to run a MacBook with the lid closed?</summary><p>macOS keeps cooling it the same way, through the keyboard deck instead of the screen. Lidocaine adds the limits macOS doesn't have for this case: it sleeps the Mac on Heavy thermal pressure, a battery above 45 °C, or a charge under 20% on battery. Keep it on a desk or a stand, not in a bag.</p></details>
       <details><summary>Do I need Claude to use it?</summary><p>No. Without Claude it keeps any long job running with the lid closed: builds, downloads, renders. Phone access is the optional part, and it uses Claude Code's own Remote Control.</p></details>
-      <details><summary>Will it ask for my password?</summary><p>Changing sleep settings needs admin rights, so on and off ask once each time, and Touch ID works. Run <code>insomnia install-nopasswd</code> to allow only Insomnia's exact commands without a prompt.</p></details>
-      <details><summary>What happens to phone chats when Insomnia turns off?</summary><p>When the time limit runs out, phone access stops too, so a timed session ends fully. If you switch Insomnia off yourself, phone access keeps running while the Mac is awake.</p></details>
+      <details><summary>Will it ask for my password?</summary><p>Changing sleep settings needs admin rights, so on and off ask once each time, and Touch ID works. Run <code>lidocaine install-nopasswd</code> to allow only Lidocaine's exact commands without a prompt.</p></details>
+      <details><summary>What happens to phone chats when Lidocaine turns off?</summary><p>When the time limit runs out, phone access stops too, so a timed session ends fully. If you switch Lidocaine off yourself, phone access keeps running while the Mac is awake.</p></details>
       <details><summary>Why do phone chats start from origin/main?</summary><p>So a chat you start from bed doesn't land on whatever branch the folder had checked out. Each one gets its own git worktree. You can switch this off in Settings to work in the folder itself.</p></details>
       <details><summary>Does it cost anything?</summary><p>No. It's free and open source under the MIT license.</p></details>
     </div>
@@ -586,11 +586,11 @@ footer a{color:var(--ink-2)}
     <img src="img/app-icon.png" alt="">
     <h2>Let the laptop sleep when you're done, not before.</h2>
     <div class="ctas">
-      <button class="btn btn-primary" data-copy="git clone https://github.com/ArtemKorchunov/insomnia.git ~/insomnia && cd ~/insomnia && ./install.sh">Copy the install command</button>
-      <a class="btn btn-glass" href="https://github.com/ArtemKorchunov/insomnia">View on GitHub</a>
+      <button class="btn btn-primary" data-copy="git clone https://github.com/ArtemKorchunov/lidocaine.git ~/lidocaine && cd ~/lidocaine && ./install.sh">Copy the install command</button>
+      <a class="btn btn-glass" href="https://github.com/ArtemKorchunov/lidocaine">View on GitHub</a>
     </div>
   </div>
-  <footer><span>Insomnia · MIT license</span><a href="https://github.com/ArtemKorchunov/insomnia">github.com/ArtemKorchunov/insomnia</a></footer>
+  <footer><span>Lidocaine · MIT license</span><a href="https://github.com/ArtemKorchunov/lidocaine">github.com/ArtemKorchunov/lidocaine</a></footer>
 </div>
 </main>
 <div class="toast glass" id="toast" role="status" aria-live="polite"></div>
@@ -680,7 +680,7 @@ footer a{color:var(--ink-2)}
   $('#setBtn').onclick = e => { const s=$('#settings'); s.hidden=!s.hidden; e.currentTarget.setAttribute('aria-expanded', !s.hidden); placeArrow(); };
   document.querySelectorAll('.settings .sw').forEach(sw => sw.onclick = () => { const v = sw.getAttribute('aria-checked')!=='true'; sw.setAttribute('aria-checked', v); if (sw.id==='swMbTime'){ S.mbTime=v; render(); } });
   $('#lockBtn').onclick = () => toast('In the app this locks the screen. Everything keeps running.');
-  $('#logBtn').onclick = () => toast('Opens /tmp/insomnia-watchdog.log in Console.');
+  $('#logBtn').onclick = () => toast('Opens /tmp/lidocaine-watchdog.log in Console.');
   $('#quitBtn').onclick = () => toast('Nice try. The demo stays.');
 
   // phone access menu
@@ -689,7 +689,7 @@ footer a{color:var(--ink-2)}
     const n = S.phone.length, add = FOLDERS.filter(f => !S.phone.includes(f));
     let h = '';
     if (n){ h += `<button data-a="copy">Copy Phone Link</button><hr><div class="h">In</div>` + S.phone.map(f=>`<div class="t">${f}</div>`).join('') + '<hr>'; }
-    h += `<div class="h">${n ? 'Add' : (S.on ? 'Turn on in' : 'Turn on Insomnia with phone access in')}</div>`;
+    h += `<div class="h">${n ? 'Add' : (S.on ? 'Turn on in' : 'Turn on Lidocaine with phone access in')}</div>`;
     if (add.length) h += `<button data-a="all">All Recent Folders</button>` + add.map(f=>`<button data-a="dir" data-d="${f}">${f}</button>`).join('');
     h += `<button data-a="choose">Choose Folder…</button>`;
     if (n) h += `<hr><button data-a="stop">Stop Phone Access</button>`;
@@ -723,7 +723,7 @@ footer a{color:var(--ink-2)}
     if (shut){
       $('#lidStatus').textContent = S.on ? 'Lid closed. Still awake.' : 'Lid closed. Asleep.';
       $('#lidSub').textContent = S.on ? (S.end ? `Screen locked · sleeps at ${fmt(S.end)}` : 'Screen locked · no time limit') + (S.phone.length? ' · phone access on' : '')
-                                     : 'Nothing kept it awake. Turn Insomnia on first.';
+                                     : 'Nothing kept it awake. Turn Lidocaine on first.';
     }
   }
 

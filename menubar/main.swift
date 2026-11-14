@@ -4,7 +4,7 @@ import IOKit
 import SwiftUI
 import UserNotifications
 
-let scriptPath = NSHomeDirectory() + "/.local/bin/insomnia"
+let scriptPath = NSHomeDirectory() + "/.local/bin/lidocaine"
 let legacyLaunchAgentPath = NSHomeDirectory() + "/Library/LaunchAgents/io.github.artemkorchunov.insomnia.plist"
 let homePrefix = NSHomeDirectory()
 let stopChoices = [0, 1, 2, 4, 8, 12]
@@ -42,13 +42,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
     var statusItem: NSStatusItem!
     let popover = NSPopover()
     @Published var state: [String: String] = [:] { didSet { stateChanged(from: oldValue) } }
-    /// Set while the user turns Insomnia off, so only stops it made on its own get a notification.
+    /// Set while the user turns Lidocaine off, so only stops it made on its own get a notification.
     var userStopping = false
     var warnedDeadline: TimeInterval = 0
     @Published var recentDirs: [String] = []
     @Published var busy = false
     @Published var now = Date()
-    /// What "insomnia update --state" said: versions, how far behind, and the new commits.
+    /// What "lidocaine update --state" said: versions, how far behind, and the new commits.
     @Published var updateInfo: [String: String] = [:]
     @Published var updateChanges: [String] = []
     @Published var updating = false
@@ -117,12 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
             NSApp.terminate(nil)
             return
         }
-        let positionKey = "NSStatusItem Preferred Position insomnia"
+        migrateInsomniaDefaults()
+        let positionKey = "NSStatusItem Preferred Position lidocaine"
         if defaults.object(forKey: positionKey) == nil {
             defaults.set(260, forKey: positionKey)
         }
         statusItem = NSStatusBar.system.statusItem(withLength: 30)
-        statusItem.autosaveName = "insomnia"
+        statusItem.autosaveName = "lidocaine"
         statusItem.behavior = []
         statusItem.button?.target = self
         statusItem.button?.action = #selector(togglePopover)
@@ -163,7 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.setNotificationCategories([UNNotificationCategory(
-            identifier: "insomnia.ending",
+            identifier: "lidocaine.ending",
             actions: [UNNotificationAction(identifier: "extend", title: "+1 hour")],
             intentIdentifiers: [])])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -240,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         let escaped = command
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-        let source = "do shell script \"\(escaped)\" with prompt \"Insomnia needs admin rights to change sleep settings.\" with administrator privileges"
+        let source = "do shell script \"\(escaped)\" with prompt \"Lidocaine needs admin rights to change sleep settings.\" with administrator privileges"
         return run("/usr/bin/osascript", ["-e", source])
     }
 
@@ -281,18 +282,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
             var body = "The Mac sleeps normally again."
             let parts = (state["last_stop"] ?? "").split(separator: "|", maxSplits: 1).map(String.init)
             if parts.count == 2 { body = "Stopped at \(parts[0]): \(parts[1]). " + body }
-            // "insomnia off" from a terminal is still you turning it off.
-            if !(parts.last ?? "").contains("insomnia off") {
-                notify(title: "Insomnia turned off", body: body)
+            // "lidocaine off" from a terminal is still you turning it off.
+            if !(parts.last ?? "").contains("lidocaine off"), !(parts.last ?? "").contains("insomnia off") {
+                notify(title: "Lidocaine turned off", body: body)
             }
         }
         if isRunning, let end = deadline {
             let left = end.timeIntervalSinceNow
             if left > 0, left <= 600, warnedDeadline != end.timeIntervalSince1970 {
                 warnedDeadline = end.timeIntervalSince1970
-                notify(title: "Insomnia stops at \(end.formatted(date: .omitted, time: .shortened))",
+                notify(title: "Lidocaine stops at \(end.formatted(date: .omitted, time: .shortened))",
                        body: "About \(max(1, Int(left / 60))) min left. Phone access stops with it.",
-                       category: "insomnia.ending")
+                       category: "lidocaine.ending")
             }
         }
     }
@@ -334,13 +335,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         let image: NSImage?
         let tip: String
         if busy {
-            image = menuIcon(.waking); tip = "Insomnia: working…"
+            image = menuIcon(.waking); tip = "Lidocaine: working…"
         } else if isRunning {
-            image = menuIcon(.awake); tip = remoteOn ? "Insomnia is on, with phone access" : "Insomnia is on"
+            image = menuIcon(.awake); tip = remoteOn ? "Lidocaine is on, with phone access" : "Lidocaine is on"
         } else if sleepDisabled {
-            image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil); tip = "Sleep is disabled but Insomnia is not running"
+            image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil); tip = "Sleep is disabled but Lidocaine is not running"
         } else {
-            image = menuIcon(.asleep); tip = "Insomnia is off"
+            image = menuIcon(.asleep); tip = "Lidocaine is off"
         }
         image?.isTemplate = true
         image?.accessibilityDescription = tip
@@ -398,16 +399,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         }
     }
 
-    /// "insomnia update" leaves the new changes in a file; say once that the update
+    /// Lidocaine used to be called Insomnia, with another bundle id. Bring its
+    /// settings and menu bar position over once. Open at Login is offered again,
+    /// since the old app's login item went with it.
+    func migrateInsomniaDefaults() {
+        guard !defaults.bool(forKey: "migratedFromInsomnia") else { return }
+        defaults.set(true, forKey: "migratedFromInsomnia")
+        guard let old = defaults.persistentDomain(forName: "io.github.artemkorchunov.insomnia") else { return }
+        for (key, value) in old where key != "loginItemOffered" {
+            defaults.set(value, forKey: key.replacingOccurrences(of: "insomnia", with: "lidocaine"))
+        }
+    }
+
+    /// "lidocaine update" leaves the new changes in a file; say once that the update
     /// landed, so nobody has to wonder whether it worked.
     func announceUpdate() {
-        let file = NSHomeDirectory() + "/.config/insomnia/just-updated"
+        let file = NSHomeDirectory() + "/.config/lidocaine/just-updated"
         guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return }
         try? FileManager.default.removeItem(atPath: file)
         let changes = text.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
         var body = changes.first ?? "You have the newest version."
         if changes.count > 1 { body += " (and \(changes.count - 1) more)" }
-        notify(title: "Insomnia updated", body: body)
+        notify(title: "Lidocaine updated", body: body)
     }
 
     /// With "Update automatically" on, install a waiting update by itself, but not
@@ -417,11 +430,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         installUpdate(quiet: true)
     }
 
-    /// Runs "insomnia update". Its output goes to a file, not a pipe: when the app's
+    /// Runs "lidocaine update". Its output goes to a file, not a pipe: when the app's
     /// code changed, build.sh quits this app and opens the new one mid-run.
     func installUpdate(quiet: Bool = false) {
         updating = true
-        let dir = NSHomeDirectory() + "/Library/Logs/Insomnia"
+        let dir = NSHomeDirectory() + "/Library/Logs/Lidocaine"
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let log = dir + "/update.log"
         FileManager.default.createFile(atPath: log, contents: nil)
@@ -460,7 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         closePopover()
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "Insomnia"
+        alert.messageText = "Lidocaine"
         alert.informativeText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         alert.alertStyle = .warning
         alert.runModal()
@@ -528,7 +541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         }
     }
 
-    /// Phone access in DIR (or "all"): on its own while Insomnia runs, with Insomnia otherwise.
+    /// Phone access in DIR (or "all"): on its own while Lidocaine runs, with Lidocaine otherwise.
     func phoneAccess(in dir: String) {
         if !isRunning { turnOn(dir: dir); return }
         var args = ["remote-on", dir]
@@ -632,7 +645,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
 
     func openLog() {
         closePopover()
-        let log = "/tmp/insomnia-watchdog.log"
+        let log = "/tmp/lidocaine-watchdog.log"
         if !FileManager.default.fileExists(atPath: log) {
             FileManager.default.createFile(atPath: log, contents: nil)
         }
@@ -766,7 +779,7 @@ struct PanelView: View {
 
     var warning: String? {
         if !app.isRunning && app.sleepDisabled {
-            return "Sleep is still disabled with nothing watching it. Turn Insomnia off to fix it."
+            return "Sleep is still disabled with nothing watching it. Turn Lidocaine off to fix it."
         }
         return nil
     }
@@ -829,7 +842,7 @@ struct PanelView: View {
                     }
                     Divider()
                 }
-                Section(app.remoteOn ? "Add" : (app.isRunning ? "Turn on in" : "Turn on Insomnia with phone access in")) {
+                Section(app.remoteOn ? "Add" : (app.isRunning ? "Turn on in" : "Turn on Lidocaine with phone access in")) {
                     if !app.addableDirs.isEmpty {
                         Button("All Recent Folders") { app.phoneAccess(in: "all") }
                         ForEach(app.addableDirs, id: \.self) { dir in
@@ -902,7 +915,7 @@ struct PanelView: View {
                             Text("• \(change)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Text(blocked
-                             ? "You changed files in the Insomnia folder, so it can't update. Undo or stash them there."
+                             ? "You changed files in the Lidocaine folder, so it can't update. Undo or stash them there."
                              : "Takes a minute. A session that's on and phone chats keep running.")
                             .font(.caption).foregroundStyle(blocked ? Color.orange : Color.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -919,7 +932,7 @@ struct PanelView: View {
                     } else {
                         Button("Update") { app.installUpdate() }
                             .buttonStyle(.borderedProminent).tint(nightAccent).controlSize(.small)
-                            .help("Get the newest Insomnia from GitHub. A session that's on keeps running.")
+                            .help("Get the newest Lidocaine from GitHub. A session that's on keeps running.")
                     }
                 }
                 .padding(10)
@@ -970,7 +983,7 @@ struct PanelView: View {
     }
 }
 
-/// Insomnia's eye inside a ring that drains as the time limit runs out. When on it is
+/// Lidocaine's eye inside a ring that drains as the time limit runs out. When on it is
 /// the app icon's eye on a graphite disc, and it looks alive: the Claude spark turns
 /// slowly and the eye blinks now and then. Reduce Motion keeps it still.
 struct TimeRing: View {
