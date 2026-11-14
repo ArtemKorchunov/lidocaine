@@ -14,6 +14,8 @@ DEADLINE_FILE=/tmp/lidocaine-deadline
 # IDLE_MINUTES. "lidocaine until-done on|off" switches it for a running session.
 UNTIL_DONE_FILE=/tmp/lidocaine-until-done
 IDLE_SINCE_FILE=/tmp/lidocaine-idle-since
+AGENTS_FILE=/tmp/lidocaine-agents
+WAIT_TASK_FILE=/tmp/lidocaine-wait-task
 # What the agents did during the last session, written when it stops; the app
 # shows it once you are back ("lidocaine report" prints it).
 REPORT_FILE=/tmp/lidocaine-report
@@ -388,7 +390,7 @@ cleanup() {
   priv /usr/bin/pmset -a disablesleep 0
   [ -n "$ORIG_PM_BATT" ] && priv /usr/bin/pmset -b powermode "$ORIG_PM_BATT"
   [ -n "$ORIG_PM_AC" ] && priv /usr/bin/pmset -c powermode "$ORIG_PM_AC"
-  rm -f "$PIDFILE" "$DEADLINE_FILE" "$UNTIL_DONE_FILE" "$IDLE_SINCE_FILE"
+  rm -f "$PIDFILE" "$DEADLINE_FILE" "$UNTIL_DONE_FILE" "$IDLE_SINCE_FILE" "$AGENTS_FILE" "$WAIT_TASK_FILE"
   log "normal sleep restored ($STOP_REASON)"
   if [ -n "${SESSION_START:-}" ]; then
     { echo "start=$SESSION_START"; echo "stop=$(date +%s)"; echo "reason=$STOP_REASON"
@@ -421,6 +423,42 @@ check_limits() {
       echo "battery at ${pct}% below ${MIN_BATTERY}%"; return
     fi
   fi
+}
+
+# When the next scheduled Claude task is due (epoch seconds), if one is due
+# before LIMIT (epoch seconds, 0 = none) and within 12 hours; prints nothing
+# otherwise. The Claude app doesn't keep the schedules where this can read them,
+# so it goes by when each task last ran: one that ran at 03:00 yesterday is due
+# at 03:00 today. Only tasks that run every 3 hours or less often count (a task
+# every half hour would keep the Mac up all night), and only while they still
+# run. If a due task hasn't started 20 minutes after its time, it's skipped.
+next_scheduled_run() {
+  local home
+  home=$(eval echo "~${SUDO_USER:-$USER}")
+  /usr/bin/python3 - "$home" "${1:-0}" <<'PY' 2>/dev/null
+import glob, os, re, sys, time
+home, limit, now = sys.argv[1], float(sys.argv[2]), time.time()
+end = min(limit or float('inf'), now + 12 * 3600)
+runs = {}
+for f in glob.glob(os.path.join(home, 'Library/Application Support/Claude/claude-code-sessions/*/*/local_*.json')):
+    try:
+        if now - os.path.getmtime(f) > 8 * 86400: continue
+        with open(f, "rb") as h: b = h.read()
+    except OSError: continue
+    task = re.search(rb'"scheduledTaskId"\s*:\s*"([^"]+)"', b)
+    at = re.search(rb'"createdAt"\s*:\s*(\d+)', b)
+    if task and at: runs.setdefault(task.group(1), []).append(int(at.group(1)) / 1000)
+due = []
+for times in runs.values():
+    times.sort()
+    gaps = sorted(b - a for a, b in zip(times, times[1:]) if b - a > 600)
+    period = gaps[len(gaps) // 2] if gaps else 86400
+    if period < 3 * 3600 or now - times[-1] > 1.5 * period: continue
+    nxt = times[-1] + period
+    while nxt < now - 1200: nxt += period
+    if nxt <= end: due.append(nxt)
+if due: print(int(min(due)))
+PY
 }
 
 # How many Claude Code and Codex sessions are in the middle of a turn. Read from
@@ -619,6 +657,15 @@ run_watchdog() {
     ORIG_PM_BATT=$(powermode_for "Battery Power")
     ORIG_PM_AC=$(powermode_for "AC Power")
     priv /usr/bin/pmset -a powermode 1
+  else
+    # On battery it always runs in Low Power Mode, so a night with the lid shut
+    # costs as little charge as it can. On the charger nothing changes.
+    ORIG_PM_BATT=$(powermode_for "Battery Power")
+    if [ -n "$ORIG_PM_BATT" ] && [ "$ORIG_PM_BATT" != 1 ]; then
+      priv /usr/bin/pmset -b powermode 1 || ORIG_PM_BATT=""
+    else
+      ORIG_PM_BATT=""
+    fi
   fi
 
   if ! priv /usr/bin/pmset -a disablesleep 1; then
@@ -639,7 +686,7 @@ run_watchdog() {
   echo "$UNTIL_DONE" > "$UNTIL_DONE_FILE"
   is_root && chmod 666 "$UNTIL_DONE_FILE"
   rm -f "$IDLE_SINCE_FILE"
-  local idle_since=0 busy
+  local idle_since=0 busy wait_task
 
   log "lidocaine ON (power=$(power_source), battery=$(batt_percent)%, temp=$(batt_temp)°C, thermal=$(thermal_pressure), limit=${HOURS}h, until-done=$UNTIL_DONE, min-battery=${MIN_BATTERY}%, max-temp=${MAX_BATT_TEMP}°C, low-power=$LOW_POWER)"
   [ -t 1 ] && echo "You can close the lid now. Ctrl+C here, or 'lidocaine off' from any terminal, restores normal sleep."
@@ -657,17 +704,26 @@ run_watchdog() {
     fi
     if [ "$(cat "$UNTIL_DONE_FILE" 2>/dev/null)" = 1 ]; then
       busy=$(agents_busy)
+      echo "${busy:-0}" > "$AGENTS_FILE"
       if [ "${busy:-0}" -gt 0 ]; then
         idle_since=0
+        rm -f "$WAIT_TASK_FILE"
       elif [ "$idle_since" = 0 ]; then
         idle_since=$now
       elif [ $((now - idle_since)) -ge $((IDLE_MINUTES * 60)) ]; then
-        STOP_REASON="agents finished"; SLEEP_AFTER=1; STOP_PHONE=1; exit 0
+        # Done, unless a scheduled task is due before the time limit: then
+        # stay up for it, and sleep once it has run.
+        wait_task=$(next_scheduled_run "$deadline")
+        if [ -n "$wait_task" ]; then
+          echo "$wait_task" > "$WAIT_TASK_FILE"
+        else
+          STOP_REASON="agents finished"; SLEEP_AFTER=1; STOP_PHONE=1; exit 0
+        fi
       fi
       echo "$idle_since" > "$IDLE_SINCE_FILE"
     else
       idle_since=0
-      rm -f "$IDLE_SINCE_FILE"
+      rm -f "$IDLE_SINCE_FILE" "$AGENTS_FILE" "$WAIT_TASK_FILE"
     fi
     if [ "$(sleep_disabled)" != 1 ]; then
       priv /usr/bin/pmset -a disablesleep 1
@@ -1069,7 +1125,8 @@ cmd_state() {
       echo "until_done=1"
       echo "idle_minutes=$IDLE_MINUTES"
       echo "idle_since=$(cat "$IDLE_SINCE_FILE" 2>/dev/null)"
-      echo "agents=$(agents_busy)"
+      echo "agents=$(cat "$AGENTS_FILE" 2>/dev/null || echo 0)"
+      [ -s "$WAIT_TASK_FILE" ] && echo "wait_task=$(cat "$WAIT_TASK_FILE")"
     fi
   else
     echo "running=0"
@@ -1140,6 +1197,7 @@ case "${1:-}" in
   update) cmd_update "${2:-}" ;;
   migrate) cmd_migrate ;;
   agents) agents_busy ;;
+  next-task) t=$(next_scheduled_run "${2:-0}"); [ -n "$t" ] && date -r "$t" "+%F %H:%M" || echo "none" ;;
   report) cmd_report "${2:-}" "${3:-}" ;;
   until-done)
     case "${2:-}" in on) v=1 ;; off) v=0 ;; *) echo "Usage: lidocaine until-done on|off" >&2; exit 2 ;; esac

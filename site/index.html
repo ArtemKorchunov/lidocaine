@@ -454,21 +454,17 @@ footer a{color:var(--ink-2)}
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3zm0 2.2V19.8c-3.4-1.4-6-4.9-6-8.8V6.4l6-2.2z"/></svg>
         <div class="grow">
           <div class="p-label" id="batt">Battery 92%, 31.4 °C, on charger</div>
-          <div class="cap">Sleeps by itself below 20% on battery, above 45 °C, or when it runs hot.</div>
+          <div class="cap">On battery it runs in Low Power Mode and sleeps below 20%. It also sleeps above 45 °C.</div>
         </div>
       </div>
 
       <div class="divider"></div>
-      <button class="settings-toggle" id="setBtn" aria-expanded="false">Settings <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2l4 4-4 4"/></svg></button>
-      <div class="settings" id="settings" hidden>
-        <div class="p-row"><span>Low Power Mode while on</span><button class="sw mini" role="switch" aria-checked="false"></button></div>
-        <div class="p-row"><span>New phone chats start from origin/main</span><button class="sw mini" role="switch" aria-checked="true"></button></div>
-        <div class="p-row"><span>Time left in the menu bar</span><button class="sw mini" id="swMbTime" role="switch" aria-checked="true"></button></div>
-        <div class="p-row"><span>Lock screen when the lid closes</span><button class="sw mini" role="switch" aria-checked="true"></button></div>
-        <div class="p-row"><span>Update automatically</span><button class="sw mini" role="switch" aria-checked="true"></button></div>
+      <div class="settings" id="settings">
+        <div class="p-row"><span>Sleep when Claude and Codex finish</span><button class="sw mini" role="switch" aria-checked="true"></button></div>
+        <div class="p-row"><span>Open at login</span><button class="sw mini" role="switch" aria-checked="true"></button></div>
       </div>
       <div class="divider"></div>
-      <div class="p-foot"><button class="small-btn" id="lockBtn">Lock Screen</button><button class="small-btn" id="logBtn">Open Log</button><span class="sp"></span><button class="small-btn" id="quitBtn">Quit</button></div>
+      <div class="p-foot"><span class="sp"></span><button class="small-btn" id="quitBtn">Quit</button></div>
     </div>
 
     <div class="handset glass" aria-hidden="true">
@@ -639,7 +635,7 @@ footer a{color:var(--ink-2)}
       <details><summary>Do I need Claude to use it?</summary><p>No. Without Claude it keeps any long job running with the lid closed: builds, downloads, renders. Phone access is the optional part, and it uses Claude Code's own Remote Control.</p></details>
       <details><summary>Will it ask for my password?</summary><p>Changing sleep settings needs admin rights, so on and off ask once each time, and Touch ID works. Run <code>lidocaine install-nopasswd</code> to allow only Lidocaine's exact commands without a prompt.</p></details>
       <details><summary>What happens to phone chats when Lidocaine turns off?</summary><p>When the time limit runs out, phone access stops too, so a timed session ends fully. If you switch Lidocaine off yourself, phone access keeps running while the Mac is awake.</p></details>
-      <details><summary>Why do phone chats start from origin/main?</summary><p>So a chat you start from bed doesn't land on whatever branch the folder had checked out. Each one gets its own git worktree. You can switch this off in Settings to work in the folder itself.</p></details>
+      <details><summary>Why do phone chats start from origin/main?</summary><p>So a chat you start from bed doesn't land on whatever branch the folder had checked out. Each one gets its own git worktree. To work in the folder itself, start it with <code>--remote-spawn same-dir</code>.</p></details>
       <details><summary>Does it cost anything?</summary><p>No. It's free and open source under the MIT license.</p></details>
     </div>
   </section>
@@ -739,10 +735,7 @@ footer a{color:var(--ink-2)}
   $('#mainSw').onclick = () => S.on ? turnOff() : turnOn();
   $('#plus1').onclick = () => { S.end += 3600e3; render(); };
   $('#mbEye').onclick = () => { const p=$('#panel'), c=p.classList.toggle('closed'); $('#mbEye').classList.toggle('open',!c); $('#mbEye').setAttribute('aria-expanded',!c); };
-  $('#setBtn').onclick = e => { const s=$('#settings'); s.hidden=!s.hidden; e.currentTarget.setAttribute('aria-expanded', !s.hidden); placeArrow(); };
   document.querySelectorAll('.settings .sw').forEach(sw => sw.onclick = () => { const v = sw.getAttribute('aria-checked')!=='true'; sw.setAttribute('aria-checked', v); if (sw.id==='swMbTime'){ S.mbTime=v; render(); } });
-  $('#lockBtn').onclick = () => toast('In the app this locks the screen. Everything keeps running.');
-  $('#logBtn').onclick = () => toast('Opens /tmp/lidocaine-watchdog.log in Console.');
   $('#quitBtn').onclick = () => toast('Nice try. The demo stays.');
 
   // phone access menu

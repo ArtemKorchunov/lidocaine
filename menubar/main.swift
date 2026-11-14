@@ -60,10 +60,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         get { defaults.integer(forKey: "hours") }
         set { defaults.set(newValue, forKey: "hours"); objectWillChange.send() }
     }
-    var lowPower: Bool {
-        get { defaults.bool(forKey: "lowPower") }
-        set { defaults.set(newValue, forKey: "lowPower"); objectWillChange.send() }
-    }
     var worktree: Bool {
         get { defaults.bool(forKey: "worktree") }
         set { defaults.set(newValue, forKey: "worktree"); objectWillChange.send() }
@@ -177,12 +173,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
             actions: [UNNotificationAction(identifier: "extend", title: "+1 hour")],
             intentIdentifiers: [])])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-        Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in self.refresh() }
+        // Every 15 s while the panel is open, once a minute otherwise, with slack
+        // so macOS can batch the wake-ups.
+        var ticks = 0
+        let poll = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
+            ticks += 1
+            if self.popover.isShown || ticks % 4 == 0 { self.refresh() }
+        }
+        poll.tolerance = 5
         announceUpdate()
         checkForUpdate()
         Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { _ in self.checkForUpdate() }
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Watch the lid to lock the screen")
-        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { _ in self.checkLid() }
+        let lid = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { _ in
+            if self.lockOnLidClose { self.checkLid() }
+        }
+        lid.tolerance = 0.5
     }
 
     @objc func togglePopover() {
@@ -537,7 +543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
 
     func turnOn(dir: String?) {
         setBusy(true)
-        let hours = self.hours, lowPower = self.lowPower, worktree = self.worktree, untilDone = self.untilDone
+        let hours = self.hours, worktree = self.worktree, untilDone = self.untilDone
         let quiet = noPassword
         DispatchQueue.global().async {
             var error: String?
@@ -548,7 +554,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
                     args += ["--remote-spawn", worktree ? "worktree" : "same-dir"]
                 }
                 if hours > 0 { args += ["--hours", String(hours)] }
-                if lowPower { args.append("--low-power") }
                 if untilDone { args.append("--until-done") }
                 let r = self.runScript(args)
                 let st = self.fetchState()
@@ -568,7 +573,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
             if error == nil {
                 var args = ["on"]
                 if hours > 0 { args += ["--hours", String(hours)] }
-                if lowPower { args.append("--low-power") }
                 if untilDone { args.append("--until-done") }
                 let r = self.runScriptAsAdmin(args)
                 if r.status != 0 {
@@ -725,26 +729,8 @@ struct PanelView: View {
             Divider()
             VStack(spacing: 8) {
                 switchRow("Sleep when Claude and Codex finish", Binding(get: { app.untilDone }, set: { app.setUntilDone($0) }))
-                    .help("Watches your Claude Code and Codex sessions. When none has been working for \(app.state["idle_minutes"] ?? "5") minutes, it stops and the Mac sleeps. The time limit still applies.")
-                switchRow(app.isRunning ? "Low Power Mode (from next start)" : "Low Power Mode while on",
-                          Binding(get: { app.lowPower }, set: { app.lowPower = $0 }))
-                switchRow("New phone chats start from origin/main", Binding(get: { app.worktree }, set: { app.worktree = $0 }))
-                    .help("Each new phone chat gets its own git worktree from origin's main branch. Off: chats run in the folder itself, on whatever branch it has checked out. Applies the next time phone access starts.")
-                switchRow("Time left in the menu bar", Binding(get: { app.showTimeInMenuBar }, set: { app.showTimeInMenuBar = $0 }))
-                switchRow("Lock screen when the lid closes", Binding(get: { app.lockOnLidClose }, set: { app.lockOnLidClose = $0 }))
+                    .help("When no Claude Code or Codex session has worked for \(app.state["idle_minutes"] ?? "5") minutes, the Mac sleeps. It stays up for a scheduled task that's due before the time limit.")
                 switchRow("Open at login", Binding(get: { app.openAtLogin }, set: { app.setOpenAtLogin($0) }))
-                if app.updateInfo["managed"] == "1" {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Update automatically").font(.callout)
-                            Text(updateCaption).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(get: { app.autoUpdate }, set: { app.autoUpdate = $0 }))
-                            .toggleStyle(.switch).controlSize(.mini).labelsHidden()
-                    }
-                    .help(app.updateInfo["current"].map { "Version \($0)" } ?? "")
-                }
             }
             Divider()
             versionRow
@@ -814,6 +800,10 @@ struct PanelView: View {
             let n = Int(app.state["agents"] ?? "") ?? 0
             if n > 0 {
                 return "Sleeps when your agents finish (\(n) working). Safe to close the lid."
+            }
+            if let t = TimeInterval(app.state["wait_task"] ?? "") {
+                let at = Date(timeIntervalSince1970: t).formatted(date: .omitted, time: .shortened)
+                return "Agents done. Stays up for the scheduled task at \(at), then sleeps."
             }
             if let s = TimeInterval(app.state["idle_since"] ?? ""), s > 0,
                let m = Double(app.state["idle_minutes"] ?? "5") {
@@ -942,7 +932,7 @@ struct PanelView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Battery \(app.state["battery"] ?? "?")%, \(app.state["temp"] ?? "?") °C, on \(app.state["power"] == "AC" ? "charger" : "battery")")
                     .font(.callout.weight(.medium))
-                Text("Sleeps by itself below \(app.state["min_battery"] ?? "20")% on battery, above \(app.state["max_temp"] ?? "45") °C, or when it runs hot.")
+                Text("On battery it runs in Low Power Mode and sleeps below \(app.state["min_battery"] ?? "20")%. It also sleeps above \(app.state["max_temp"] ?? "45") °C.")
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(2, reservesSpace: true)
             }
@@ -1031,8 +1021,6 @@ struct PanelView: View {
 
     var footer: some View {
         HStack {
-            Button("Lock Screen") { app.closePopover(); lockScreenNow() }
-            Button("Open Log") { app.openLog() }
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }
         }
