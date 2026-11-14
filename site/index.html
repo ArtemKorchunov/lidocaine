@@ -226,6 +226,31 @@ nav .links a:hover{color:var(--ink);background:rgba(255,255,255,.08)}
 
 /* ---------- sections ---------- */
 section{padding:120px 0 0}
+/* Comparison with the other lid-closed tools */
+.cmp{margin-top:36px;padding:0;overflow:hidden}
+.cmp .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cmp table{border-collapse:collapse;width:100%;min-width:860px;font-size:14px}
+.cmp th,.cmp td{padding:12px 14px;text-align:center;border-bottom:1px solid var(--line);vertical-align:middle}
+.cmp thead th{font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.cmp thead th a{color:inherit;text-decoration:none}
+.cmp thead th a:hover{color:var(--ink)}
+.cmp tbody th{text-align:left;font-weight:500;color:var(--ink);min-width:210px;position:sticky;left:0;background:rgba(14,14,20,.92);backdrop-filter:blur(8px);z-index:1}
+.cmp tbody tr:last-child th,.cmp tbody tr:last-child td{border-bottom:0}
+.cmp .us{background:rgba(232,135,106,.10)}
+.cmp thead .us{color:var(--spark)}
+.cmp .y{color:var(--spark);font-weight:700}
+.cmp .n{color:var(--ink-3)}
+.cmp .p{color:var(--ink-2);font-size:12.5px}
+.cmp-note{color:var(--ink-3);font-size:13px;margin-top:14px;max-width:72ch}
+.cmp-note a{color:var(--ink-2)}
+.cmp-swipe{display:none;color:var(--ink-3);font-size:13px;margin:14px 0 0}
+@media (max-width:600px){
+  .cmp table{min-width:720px;font-size:13px}
+  .cmp tbody th{min-width:150px;width:150px;padding:10px 12px;font-size:12.5px;line-height:1.35}
+  .cmp th,.cmp td{padding:10px 8px}
+  .cmp-swipe{display:block}
+}
+
 .kicker{color:var(--spark);font-weight:600;font-size:15px;margin:0 0 10px}
 h2{font:700 clamp(34px,5vw,60px)/1.04 var(--display);letter-spacing:-.025em;margin:0;max-width:16ch}
 .sub{color:var(--ink-2);font-size:18px;max-width:52ch;margin:18px 0 0}
@@ -345,6 +370,7 @@ footer a{color:var(--ink-2)}
     <a class="brand" href="#top"><img src="img/app-icon.png" alt="">Lidocaine</a>
     <div class="links">
       <a href="#evening">How it works</a>
+      <a href="#compare">Compare</a>
       <a href="#safety">Safety</a>
       <a href="#install">Install</a>
       <a class="gh" href="https://github.com/ArtemKorchunov/lidocaine">GitHub</a>
@@ -467,6 +493,30 @@ footer a{color:var(--ink-2)}
       <article class="alt glass"><h3><code>sudo pmset disablesleep 1</code></h3><p class="works">Really keeps it awake with the lid closed.</p><p class="breaks">Nothing ever turns it back on. One night in a bag and it's hot and empty.</p></article>
     </div>
     <div class="fix glass"><img src="img/app-icon.png" alt=""><span><b>Lidocaine uses the third one</b>, and adds what it lacks: a watchdog that turns sleep back on when it's too hot, too low or too late, even after a crash.</span></div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section id="compare">
+    <p class="kicker">Compare</p>
+    <h2>The other lid-closed apps, side by side.</h2>
+    <p class="sub">2026 brought a wave of apps that keep a closed MacBook working for AI agents. Here's what each one says it does.</p>
+    <p class="cmp-swipe" aria-hidden="true">Swipe the table sideways to see every app →</p>
+    <div class="cmp glass"><div class="scroll"><table>
+<thead><tr><th scope="col"></th><th scope="col" class="us">Lidocaine</th><th scope="col"><a href="https://www.producthunt.com/p/vigil-16/vigil-17">Vigil</a></th><th scope="col"><a href="https://sleepwalk.app">SleepWalk</a></th><th scope="col"><a href="https://www.producthunt.com/products/lidrun">LidRun</a></th><th scope="col"><a href="https://chatgate.ai/post/agents-never-sleep">Agents Never Sleep</a></th><th scope="col"><a href="https://www.producthunt.com/posts/capsomnia">Capsomnia</a></th><th scope="col"><a href="https://apps.apple.com/us/app/amphetamine/id937984704?mt=12">Amphetamine</a></th><th scope="col"><code>caffeinate</code></th></tr></thead>
+<tbody>
+<tr><th scope="row">Price</th><td class="p us">Free</td><td class="p">Subscription</td><td class="p">One-time purchase</td><td class="p">Free + Pro</td><td class="p">$4.99</td><td class="p">Free</td><td class="p">Free</td><td class="p">Built in</td></tr>
+<tr><th scope="row">Keeps working with the lid closed</th><td class="y us">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">✕</td></tr>
+<tr><th scope="row">Sleeps the Mac when it runs hot</th><td class="y us">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">Lets go of the wake lock</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">✕</td></tr>
+<tr><th scope="row">Stops on low battery</th><td class="y us">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="n">✕</td></tr>
+<tr><th scope="row">Stops when your agents finish</th><td class="y us">✓</td><td class="y">✓</td><td class="p">Through an agent skill</td><td class="p">Per app</td><td class="n">—</td><td class="p">Timer</td><td class="n">—</td><td class="n">✕</td></tr>
+<tr><th scope="row">Puts sleep back after a crash or reboot</th><td class="y us">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>
+<tr><th scope="row">Start and continue Claude Code from your phone</th><td class="y us">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">✕</td></tr>
+<tr><th scope="row">Morning report of what the agents did</th><td class="y us">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">✕</td></tr>
+<tr><th scope="row">Open source</th><td class="y us">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="y">✓</td><td class="n">—</td><td class="y">✓</td></tr>
+</tbody>
+    </table></div></div>
+    <p class="cmp-note">✓ listed on the app's own page or store listing · — not listed there · ✕ can't. Checked in November 2026 from each app's site, Product Hunt or App Store page (linked above). Spotted something out of date? <a href="https://github.com/ArtemKorchunov/lidocaine/issues">Open an issue</a> and it gets fixed.</p>
   </section>
 </div>
 <div class="wrap">
