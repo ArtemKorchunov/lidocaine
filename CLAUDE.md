@@ -25,7 +25,7 @@ When the user asks you to set up, install, or use Lidocaine, follow this plan.
 - Start: `lidocaine on` (options: `--hours N`, `--low-power`, `--max-temp C`, `--min-battery P`).
 - With phone access: `lidocaine on --remote <folder>`. Pick the folder the user wants to work in from the phone, or `--remote all` when they want every recent folder (and all their chats) reachable from the phone; `lidocaine recent-dirs` lists folders of recent Claude Code sessions. Phone access needs the `claude` CLI signed in with a claude.ai plan.
 - Stop: `lidocaine off`. Phone access keeps running so phone chats stay connected; `lidocaine off --all` or `lidocaine remote-off` stops it.
-- Update: `lidocaine update` pulls the latest version into the cloned folder and rebuilds the menu bar app if its code changed (`--check` only reports). If it says the folder has local changes, ask the user before stashing them.
+- Update: `lidocaine update` moves the cloned folder to the latest release (the highest `vX.Y.Z` tag) and rebuilds the menu bar app if its code changed (`--check` only reports). If it says the folder has local changes, ask the user before stashing them.
 - Check: `lidocaine status` (human) or `lidocaine state` (key=value). Report plainly: running or not, sleep disabled or not, lid, battery %, battery temperature, thermal pressure, phone access.
 
 ## 4. Safety answers
@@ -44,3 +44,4 @@ If the user worries about heat, run `lidocaine status` and give the real numbers
 - `scripts/lidocaine.sh` is bash 3.2 compatible (macOS default) and runs with `set -u`: guard empty arrays with `${arr[@]+"${arr[@]}"}`.
 - Background processes started for the menu bar app must not hold the caller's stdout/stderr open, or the app waits forever. Redirect the whole subshell, not only the inner command.
 - After changing anything in `menubar/`, run `menubar/build.sh`; it rebuilds and relaunches the app.
+- Releases: installed copies (the menu bar app's auto-update and `lidocaine update`) follow the newest `vX.Y.Z` tag, not `main`. A pushed commit reaches nobody until it is released, the maintainer's own Mac included. After pushing changes to `main`, ask the user whether to publish a release. If yes, bump the version (patch for fixes, minor for features), and run `gh release create vX.Y.Z --target main --title "Lidocaine X.Y" --notes-file <notes>` with plain-language notes on what changed for users. Then `lidocaine update` installs it.

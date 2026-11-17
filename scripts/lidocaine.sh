@@ -102,8 +102,9 @@ Usage:
                           running (after a crash, kill -9 or reboot mid-session).
   lidocaine heal-agent install|uninstall|status
                           A login agent that runs "heal" at login and every minute.
-  lidocaine update [--check]  Get the latest Lidocaine from GitHub (git pull in the
-                          cloned folder) and rebuild the menu bar app if it changed.
+  lidocaine update [--check]  Get the latest Lidocaine release from GitHub (a release
+                          is a vX.Y.Z tag; commits on main without one don't count)
+                          and rebuild the menu bar app if it changed.
                           --check only says whether an update is waiting
                           (--state says it as key=value lines, for the app).
   lidocaine allow-schedules  Allow Claude to turn Remote Control on for scheduled-task
@@ -886,9 +887,19 @@ is_lidocaine_clone() {
   git -C "$repo" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1
 }
 
+# What an update moves to: the newest release, i.e. the highest vX.Y.Z tag,
+# so work pushed to main reaches people only once it's released. Before the
+# first release existed this was the tip of main; a clone without tags still
+# falls back to that. Run after a fetch.
+update_target() {
+  local tag
+  tag=$(git -C "$1" tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)
+  if [ -n "$tag" ]; then echo "refs/tags/$tag"; else echo '@{u}'; fi
+}
+
 # key=value lines for the menu bar app. Fetches from GitHub, so it takes a moment.
 update_state() {
-  local repo
+  local repo target
   repo=$(lidocaine_repo)
   if ! is_lidocaine_clone "$repo"; then
     echo "managed=0"
@@ -897,14 +908,15 @@ update_state() {
   echo "managed=1"
   echo "repo=$repo"
   git -C "$repo" log -1 --format='current=%h%ncurrent_date=%cd' --date=short HEAD
-  if ! git -C "$repo" fetch --quiet 2>/dev/null; then
+  if ! git -C "$repo" fetch --quiet --tags --force 2>/dev/null; then
     echo "offline=1"
     return 0
   fi
-  git -C "$repo" log -1 --format='latest=%h%nlatest_date=%cd' --date=short '@{u}'
-  echo "behind=$(git -C "$repo" rev-list --count 'HEAD..@{u}')"
+  target=$(update_target "$repo")
+  git -C "$repo" log -1 --format='latest=%h%nlatest_date=%cd' --date=short "$target"
+  echo "behind=$(git -C "$repo" rev-list --count "HEAD..$target")"
   [ -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ] || echo "local_changes=1"
-  git -C "$repo" log --format='change=%s' 'HEAD..@{u}' | head -n 8
+  git -C "$repo" log --format='change=%s' "HEAD..$target" | head -n 8
 }
 
 # Rebuild the menu bar app when its code changed since the commit it was built
@@ -920,7 +932,7 @@ rebuild_app_if_behind() {
 }
 
 cmd_update() {
-  local check=0 repo old behind
+  local check=0 repo old behind target
   case "${1:-}" in
     --check) check=1 ;;
     --state) update_state; return ;;
@@ -933,8 +945,9 @@ cmd_update() {
     echo "Reinstall: git clone https://github.com/ArtemKorchunov/lidocaine.git ~/lidocaine && ~/lidocaine/install.sh" >&2
     return 1
   fi
-  git -C "$repo" fetch --quiet || { echo "Couldn't reach GitHub. Check the connection and try again." >&2; return 1; }
-  behind=$(git -C "$repo" rev-list --count 'HEAD..@{u}')
+  git -C "$repo" fetch --quiet --tags --force || { echo "Couldn't reach GitHub. Check the connection and try again." >&2; return 1; }
+  target=$(update_target "$repo")
+  behind=$(git -C "$repo" rev-list --count "HEAD..$target")
   if [ "$behind" = 0 ]; then
     [ "$check" = 1 ] || rebuild_app_if_behind "$repo" HEAD || return 1
     echo "Lidocaine is up to date ($(git -C "$repo" log -1 --format='%h from %cd' --date=short))."
@@ -942,7 +955,7 @@ cmd_update() {
   fi
   if [ "$check" = 1 ]; then
     echo "$behind update(s) waiting. Run: lidocaine update"
-    git -C "$repo" log --format='  - %s' 'HEAD..@{u}'
+    git -C "$repo" log --format='  - %s' "HEAD..$target"
     return 0
   fi
   if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
@@ -950,11 +963,11 @@ cmd_update() {
     return 1
   fi
   old=$(git -C "$repo" rev-parse HEAD)
-  if ! git -C "$repo" merge --ff-only --quiet '@{u}'; then
+  if ! git -C "$repo" merge --ff-only --quiet "$target"; then
     echo "Your copy in $repo has commits of its own, so it can't fast-forward. Run git -C $repo pull and sort it out there." >&2
     return 1
   fi
-  echo "Updated Lidocaine to $(git -C "$repo" log -1 --format=%h). New:"
+  echo "Updated Lidocaine to ${target#refs/tags/} ($(git -C "$repo" log -1 --format=%h)). New:"
   git -C "$repo" log --format='  - %s' "$old..HEAD"
   # The menu bar app reads this once (after it restarts, if it was rebuilt) to say
   # the update landed and what's new.

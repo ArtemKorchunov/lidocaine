@@ -66,11 +66,11 @@ The heal agent is a per-user LaunchAgent (`~/Library/LaunchAgents/com.oddproblem
 ### Update
 
 ```bash
-lidocaine update           # get the latest version and rebuild the menu bar app if it changed
+lidocaine update           # get the latest release and rebuild the menu bar app if it changed
 lidocaine update --check   # only say whether an update is waiting
 ```
 
-The menu bar app does this for you: it checks GitHub every few hours and installs a new version by itself while its panel is closed (switch off **Update automatically** in the panel to update only when you click **Update**). On the command line, `lidocaine update` pulls the latest version into the folder you cloned and rebuilds the menu bar app when the app's code changed. If Lidocaine is on, the running session keeps going as it was, and the update takes effect the next time you turn it on. If you installed before `update` existed, update once by hand: `cd ~/lidocaine && git pull && ./install.sh`.
+Updates follow [releases](https://github.com/ArtemKorchunov/lidocaine/releases): work on `main` reaches you only once it is released. The menu bar app does this for you: it checks GitHub every few hours and installs a new release by itself while its panel is closed. On the command line, `lidocaine update` moves the folder you cloned to the latest release and rebuilds the menu bar app when the app's code changed. If Lidocaine is on, the running session keeps going as it was, and the update takes effect the next time you turn it on. If you installed before `update` existed, update once by hand: `cd ~/lidocaine && git pull && ./install.sh`.
 
 ### Personal settings
 
