@@ -932,7 +932,7 @@ struct PanelView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Battery \(app.state["battery"] ?? "?")%, \(app.state["temp"] ?? "?") °C, on \(app.state["power"] == "AC" ? "charger" : "battery")")
                     .font(.callout.weight(.medium))
-                Text("On battery it runs in Low Power Mode and sleeps below \(app.state["min_battery"] ?? "20")%. It also sleeps above \(app.state["max_temp"] ?? "45") °C.")
+                Text("Sleeps by itself below \(app.state["min_battery"] ?? "20")% on battery or above \(app.state["max_temp"] ?? "45") °C.")
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(2, reservesSpace: true)
             }

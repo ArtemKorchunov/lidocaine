@@ -657,15 +657,6 @@ run_watchdog() {
     ORIG_PM_BATT=$(powermode_for "Battery Power")
     ORIG_PM_AC=$(powermode_for "AC Power")
     priv /usr/bin/pmset -a powermode 1
-  else
-    # On battery it always runs in Low Power Mode, so a night with the lid shut
-    # costs as little charge as it can. On the charger nothing changes.
-    ORIG_PM_BATT=$(powermode_for "Battery Power")
-    if [ -n "$ORIG_PM_BATT" ] && [ "$ORIG_PM_BATT" != 1 ]; then
-      priv /usr/bin/pmset -b powermode 1 || ORIG_PM_BATT=""
-    else
-      ORIG_PM_BATT=""
-    fi
   fi
 
   if ! priv /usr/bin/pmset -a disablesleep 1; then
