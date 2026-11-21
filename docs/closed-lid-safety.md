@@ -24,7 +24,7 @@ Researched October 2026 for 14/16-inch Apple Silicon MacBook Pros (with fans). B
 - A MacBook Air has no fan, so closing it costs more performance, but its thermal limits still protect it.
 
 ## Thresholds the watchdog uses
-- Thermal pressure (`powermetrics -s thermal`): Nominal, Moderate, Heavy, Trapping, Sleeping. Stops at Heavy or higher.
+- Thermal pressure (`powermetrics -s thermal`): Nominal, Moderate, Heavy, Trapping, Sleeping. Stops at once at Trapping or higher, and after 15 minutes of continuous Heavy (brief Heavy spikes are normal throttling under load).
 - Battery temperature (`ioreg -rn AppleSmartBattery`, in hundredths of a °C): under 35 is fine, 35–40 is worth watching, above 40–45 means act. 45 is the default stop.
 
 ## Sources

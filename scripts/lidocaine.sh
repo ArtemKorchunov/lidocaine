@@ -16,6 +16,7 @@ UNTIL_DONE_FILE=/tmp/lidocaine-until-done
 IDLE_SINCE_FILE=/tmp/lidocaine-idle-since
 AGENTS_FILE=/tmp/lidocaine-agents
 WAIT_TASK_FILE=/tmp/lidocaine-wait-task
+HEAVY_SINCE_FILE=/tmp/lidocaine-heavy-since
 # What the agents did during the last session, written when it stops; the app
 # shows it once you are back ("lidocaine report" prints it).
 REPORT_FILE=/tmp/lidocaine-report
@@ -42,7 +43,7 @@ LIDOCAINE_CONFIG="${LIDOCAINE_CONFIG:-$HOME/.config/lidocaine/config}"
 if [ -f "$LIDOCAINE_CONFIG" ]; then
   while IFS='=' read -r key value; do
     case "$key" in
-      LIDOCAINE_SCHEDULE_IGNORE|LIDOCAINE_IDLE_MINUTES|LIDOCAINE_CLAUDE_BIN|LIDOCAINE_REMOTE_SPAWN|LIDOCAINE_REMOTE_MAX|LIDOCAINE_REMOTE_MIN_BATTERY) ;;
+      LIDOCAINE_SCHEDULE_IGNORE|LIDOCAINE_IDLE_MINUTES|LIDOCAINE_CLAUDE_BIN|LIDOCAINE_REMOTE_SPAWN|LIDOCAINE_REMOTE_MAX|LIDOCAINE_REMOTE_MIN_BATTERY|LIDOCAINE_HEAVY_MINUTES) ;;
       *) continue ;;
     esac
     [ -n "${!key+set}" ] && continue
@@ -64,7 +65,14 @@ REMOTE_DIRS=""
 REMOTE_MAX="${LIDOCAINE_REMOTE_MAX:-8}"
 REMOTE_SPAWN="${LIDOCAINE_REMOTE_SPAWN:-worktree}"
 REMOTE_MIN_BATTERY="${LIDOCAINE_REMOTE_MIN_BATTERY:-20}"
-TRIP_LEVELS="Heavy|Trapping|Sleeping|Serious|Critical"
+# Thermal pressure. Trapping/Sleeping/Critical stop the session at once.
+# Heavy/Serious means macOS is throttling under load: normal, often brief, and
+# it can show right at switch-on, so it stops the session only after
+# HEAVY_MINUTES in a row. The battery temperature limit (--max-temp) is hard.
+TRIP_LEVELS="Trapping|Sleeping|Critical"
+HEAVY_LEVELS="Heavy|Serious"
+HEAVY_MINUTES="${LIDOCAINE_HEAVY_MINUTES:-15}"
+case "$HEAVY_MINUTES" in ''|*[!0-9]*) HEAVY_MINUTES=15 ;; esac
 
 CAFF_PID=""
 ORIG_PM_BATT=""
@@ -391,7 +399,7 @@ cleanup() {
   priv /usr/bin/pmset -a disablesleep 0
   [ -n "$ORIG_PM_BATT" ] && priv /usr/bin/pmset -b powermode "$ORIG_PM_BATT"
   [ -n "$ORIG_PM_AC" ] && priv /usr/bin/pmset -c powermode "$ORIG_PM_AC"
-  rm -f "$PIDFILE" "$DEADLINE_FILE" "$UNTIL_DONE_FILE" "$IDLE_SINCE_FILE" "$AGENTS_FILE" "$WAIT_TASK_FILE"
+  rm -f "$PIDFILE" "$DEADLINE_FILE" "$UNTIL_DONE_FILE" "$IDLE_SINCE_FILE" "$AGENTS_FILE" "$WAIT_TASK_FILE" "$HEAVY_SINCE_FILE"
   log "normal sleep restored ($STOP_REASON)"
   if [ -n "${SESSION_START:-}" ]; then
     { echo "start=$SESSION_START"; echo "stop=$(date +%s)"; echo "reason=$STOP_REASON"
@@ -417,6 +425,23 @@ check_limits() {
   lvl=$(thermal_pressure)
   if echo "$lvl" | grep -Eqi "^($TRIP_LEVELS)$"; then
     echo "thermal pressure is $lvl"; return
+  fi
+  # Heavy: remember since when (this runs in a subshell, so in a file) and
+  # stop only once it has lasted HEAVY_MINUTES in a row.
+  if echo "$lvl" | grep -Eqi "^($HEAVY_LEVELS)$"; then
+    local since now
+    now=$(date +%s)
+    since=$(cat "$HEAVY_SINCE_FILE" 2>/dev/null)
+    case "$since" in ''|*[!0-9]*)
+      since=$now; echo "$since" > "$HEAVY_SINCE_FILE"
+      log "thermal pressure is $lvl; macOS is throttling. Stopping only if it lasts ${HEAVY_MINUTES} minutes" ;;
+    esac
+    if [ $((now - since)) -ge $((HEAVY_MINUTES * 60)) ]; then
+      echo "thermal pressure $lvl for ${HEAVY_MINUTES} minutes"; return
+    fi
+  elif [ -f "$HEAVY_SINCE_FILE" ]; then
+    rm -f "$HEAVY_SINCE_FILE"
+    log "thermal pressure back to $lvl"
   fi
   if on_battery; then
     pct=$(batt_percent)
@@ -677,7 +702,7 @@ run_watchdog() {
   is_root && chmod 666 "$DEADLINE_FILE"
   echo "$UNTIL_DONE" > "$UNTIL_DONE_FILE"
   is_root && chmod 666 "$UNTIL_DONE_FILE"
-  rm -f "$IDLE_SINCE_FILE"
+  rm -f "$IDLE_SINCE_FILE" "$HEAVY_SINCE_FILE"
   local idle_since=0 busy wait_task
 
   log "lidocaine ON (power=$(power_source), battery=$(batt_percent)%, temp=$(batt_temp)°C, thermal=$(thermal_pressure), limit=${HOURS}h, until-done=$UNTIL_DONE, min-battery=${MIN_BATTERY}%, max-temp=${MAX_BATT_TEMP}°C, low-power=$LOW_POWER)"
