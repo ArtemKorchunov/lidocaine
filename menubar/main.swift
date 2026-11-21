@@ -64,15 +64,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
         get { defaults.bool(forKey: "worktree") }
         set { defaults.set(newValue, forKey: "worktree"); objectWillChange.send() }
     }
-    /// Sleep once no Claude Code or Codex session has worked for a few minutes.
-    var untilDone: Bool {
-        get { defaults.bool(forKey: "untilDone") }
-        set { defaults.set(newValue, forKey: "untilDone"); objectWillChange.send() }
-    }
-    func setUntilDone(_ on: Bool) {
-        untilDone = on
-        if isRunning { perform(["until-done", on ? "on" : "off"]) }
-    }
     var lidWasClosed = lidIsClosed()
     var activity: NSObjectProtocol?
     var showTimeInMenuBar: Bool {
@@ -116,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Updating is a chore nobody asked for, so it happens on its own unless switched off.
-        defaults.register(defaults: ["autoUpdate": true, "worktree": true, "untilDone": true])
+        defaults.register(defaults: ["autoUpdate": true, "worktree": true])
         if let id = Bundle.main.bundleIdentifier,
            NSRunningApplication.runningApplications(withBundleIdentifier: id).count > 1 {
             NSApp.terminate(nil)
@@ -543,7 +534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
 
     func turnOn(dir: String?) {
         setBusy(true)
-        let hours = self.hours, worktree = self.worktree, untilDone = self.untilDone
+        let hours = self.hours, worktree = self.worktree
         let quiet = noPassword
         DispatchQueue.global().async {
             var error: String?
@@ -554,7 +545,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
                     args += ["--remote-spawn", worktree ? "worktree" : "same-dir"]
                 }
                 if hours > 0 { args += ["--hours", String(hours)] }
-                if untilDone { args.append("--until-done") }
                 let r = self.runScript(args)
                 let st = self.fetchState()
                 DispatchQueue.main.async {
@@ -573,7 +563,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUs
             if error == nil {
                 var args = ["on"]
                 if hours > 0 { args += ["--hours", String(hours)] }
-                if untilDone { args.append("--until-done") }
                 let r = self.runScriptAsAdmin(args)
                 if r.status != 0 {
                     error = r.output.contains("-128") ? "" : r.output
@@ -728,8 +717,6 @@ struct PanelView: View {
             safetyRow
             Divider()
             VStack(spacing: 8) {
-                switchRow("Sleep when Claude and Codex finish", Binding(get: { app.untilDone }, set: { app.setUntilDone($0) }))
-                    .help("When no Claude Code or Codex session has worked for \(app.state["idle_minutes"] ?? "5") minutes, the Mac sleeps. It stays up for a scheduled task that's due before the time limit.")
                 switchRow("Open at login", Binding(get: { app.openAtLogin }, set: { app.setOpenAtLogin($0) }))
             }
             Divider()
@@ -796,27 +783,29 @@ struct PanelView: View {
         if let stop = batteryStop, app.deadline.map({ stop < $0 }) ?? true {
             return "On battery, sleeps near \(stop.formatted(date: .omitted, time: .shortened)) at \(app.state["min_battery"] ?? "20")%."
         }
-        if app.isRunning, app.state["until_done"] == "1" {
+        if app.isRunning {
             let n = Int(app.state["agents"] ?? "") ?? 0
+            if let r = TimeInterval(app.state["resting_since"] ?? "") {
+                let at = Date(timeIntervalSince1970: r).formatted(date: .omitted, time: .shortened)
+                return "Resting since \(at): nothing was running. Awake again now the lid is open."
+            }
+            if app.remoteOn {
+                return n > 0 ? "\(n) agent\(n == 1 ? "" : "s") working. Phone access keeps it awake. Safe to close the lid."
+                             : "Phone access keeps it awake, so your phone can start work. Safe to close the lid."
+            }
             if n > 0 {
-                return "Sleeps when your agents finish (\(n) working). Safe to close the lid."
+                return "\(n) agent\(n == 1 ? "" : "s") working, stays awake. Safe to close the lid."
             }
             if let t = TimeInterval(app.state["wait_task"] ?? "") {
                 let at = Date(timeIntervalSince1970: t).formatted(date: .omitted, time: .shortened)
-                return "Agents done. Stays up for the scheduled task at \(at), then sleeps."
+                return "Nothing running. Stays up for the scheduled task at \(at)."
             }
             if let s = TimeInterval(app.state["idle_since"] ?? ""), s > 0,
                let m = Double(app.state["idle_minutes"] ?? "5") {
                 let at = Date(timeIntervalSince1970: s + m * 60)
-                return "No agent working. Sleeps at \(at.formatted(date: .omitted, time: .shortened)) unless one starts."
+                return "Nothing running. Rests at \(at.formatted(date: .omitted, time: .shortened)) unless an agent starts."
             }
-            return "Sleeps when your agents finish. Safe to close the lid."
-        }
-        if app.isRunning {
-            if let end = app.deadline {
-                return "Sleeps at \(end.formatted(date: .omitted, time: .shortened)). Safe to close the lid."
-            }
-            return "No time limit. Safe to close the lid."
+            return "Rests when the lid is closed and nothing is running. Opening the lid wakes it."
         }
         if let last = app.state["last_stop"], !last.isEmpty {
             let parts = last.split(separator: "|", maxSplits: 1).map(String.init)

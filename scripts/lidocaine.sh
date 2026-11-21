@@ -10,9 +10,10 @@ LOG=/tmp/lidocaine-watchdog.log
 # The running watchdog re-reads its stop time from here every check, so
 # "lidocaine set-hours" can change the limit of a session that is already on.
 DEADLINE_FILE=/tmp/lidocaine-deadline
-# "1" while the running session stops by itself once no agent has worked for
-# IDLE_MINUTES. "lidocaine until-done on|off" switches it for a running session.
-UNTIL_DONE_FILE=/tmp/lidocaine-until-done
+# A running session rests (sleep allowed, Mac put to sleep) when the lid is
+# closed, phone access is off and no agent has worked for IDLE_MINUTES. Opening
+# the lid wakes it back up. This file holds when the current rest started.
+REST_FILE=/tmp/lidocaine-resting
 IDLE_SINCE_FILE=/tmp/lidocaine-idle-since
 AGENTS_FILE=/tmp/lidocaine-agents
 WAIT_TASK_FILE=/tmp/lidocaine-wait-task
@@ -55,7 +56,6 @@ SCHEDULE_IGNORE="${LIDOCAINE_SCHEDULE_IGNORE-}"
 
 INTERVAL=30
 HOURS=0
-UNTIL_DONE=0
 IDLE_MINUTES="${LIDOCAINE_IDLE_MINUTES:-5}"
 MIN_BATTERY=20
 MAX_BATT_TEMP=45
@@ -98,7 +98,6 @@ Usage:
                           Only start phone access (no sudo), in each DIR or in
                           all recent Claude folders. Adds to folders already on.
   lidocaine remote-off     Stop phone access in every folder.
-  lidocaine until-done on|off  Switch "sleep when the agents finish" for the running session.
   lidocaine agents        How many Claude Code and Codex sessions are working right now.
   lidocaine report [START [STOP]]  What the agents did in the last session (or between
                           two epoch times): sessions, work time, tokens, limit hits.
@@ -122,10 +121,6 @@ Usage:
 Options for "on":
   --hours N          Stop after N hours (decimals ok), and stop phone access then too.
                      Default: no limit. Change it later with "lidocaine set-hours".
-  --until-done       Stop and sleep once no Claude Code or Codex session has been
-                     working for 5 minutes (LIDOCAINE_IDLE_MINUTES). Combines with
-                     --hours, which then caps it. Switch it later with
-                     "lidocaine until-done on|off".
   --min-battery P    On battery power, stop and sleep below P%. Default: 20.
   --max-temp C       Stop and sleep if battery temperature exceeds C °C. Default: 45.
   --low-power        Switch to Low Power Mode while running (less heat), restore after.
@@ -391,6 +386,14 @@ stop_remote() {
   rm -f "$REMOTE_STATE_DIR"/*.pid "$REMOTE_STATE_DIR"/*.dir "$REMOTE_PIDFILE" "$REMOTE_DIRFILE"
 }
 
+# The morning report for the stretch since SESSION_START, if there is one.
+write_report() {
+  [ -n "${SESSION_START:-}" ] || return 0
+  { echo "start=$SESSION_START"; echo "stop=$(date +%s)"; echo "reason=$1"
+    session_report "$SESSION_START" "$(date +%s)"; } > "$REPORT_FILE" 2>/dev/null
+  chmod 644 "$REPORT_FILE" 2>/dev/null
+}
+
 cleanup() {
   trap - EXIT INT TERM HUP
   if [ -n "$CAFF_PID" ]; then
@@ -399,13 +402,9 @@ cleanup() {
   priv /usr/bin/pmset -a disablesleep 0
   [ -n "$ORIG_PM_BATT" ] && priv /usr/bin/pmset -b powermode "$ORIG_PM_BATT"
   [ -n "$ORIG_PM_AC" ] && priv /usr/bin/pmset -c powermode "$ORIG_PM_AC"
-  rm -f "$PIDFILE" "$DEADLINE_FILE" "$UNTIL_DONE_FILE" "$IDLE_SINCE_FILE" "$AGENTS_FILE" "$WAIT_TASK_FILE" "$HEAVY_SINCE_FILE"
+  rm -f "$PIDFILE" "$DEADLINE_FILE" "$REST_FILE" "$IDLE_SINCE_FILE" "$AGENTS_FILE" "$WAIT_TASK_FILE" "$HEAVY_SINCE_FILE"
   log "normal sleep restored ($STOP_REASON)"
-  if [ -n "${SESSION_START:-}" ]; then
-    { echo "start=$SESSION_START"; echo "stop=$(date +%s)"; echo "reason=$STOP_REASON"
-      session_report "$SESSION_START" "$(date +%s)"; } > "$REPORT_FILE" 2>/dev/null
-    chmod 644 "$REPORT_FILE" 2>/dev/null
-  fi
+  write_report "$STOP_REASON"
   if [ "$STOP_PHONE" = 1 ] && remote_pid >/dev/null; then
     stop_remote >/dev/null 2>&1
     log "phone access stopped too"
@@ -619,7 +618,7 @@ parse_opts() {
       --max-temp) MAX_BATT_TEMP="$2"; shift 2 ;;
       --interval) INTERVAL="$2"; shift 2 ;;
       --low-power) LOW_POWER=1; shift ;;
-      --until-done) UNTIL_DONE=1; shift ;;
+      --until-done) shift ;;  # always on now; kept so old commands still work
       --fg) FOREGROUND=1; shift ;;
       --remote) REMOTE_DIRS="${REMOTE_DIRS:+$REMOTE_DIRS
 }$2"; shift 2 ;;
@@ -700,12 +699,10 @@ run_watchdog() {
   fi
   echo "$deadline" > "$DEADLINE_FILE"
   is_root && chmod 666 "$DEADLINE_FILE"
-  echo "$UNTIL_DONE" > "$UNTIL_DONE_FILE"
-  is_root && chmod 666 "$UNTIL_DONE_FILE"
-  rm -f "$IDLE_SINCE_FILE" "$HEAVY_SINCE_FILE"
-  local idle_since=0 busy wait_task
+  rm -f "$IDLE_SINCE_FILE" "$HEAVY_SINCE_FILE" "$REST_FILE"
+  local idle_since=0 busy wait_task resting=0
 
-  log "lidocaine ON (power=$(power_source), battery=$(batt_percent)%, temp=$(batt_temp)°C, thermal=$(thermal_pressure), limit=${HOURS}h, until-done=$UNTIL_DONE, min-battery=${MIN_BATTERY}%, max-temp=${MAX_BATT_TEMP}°C, low-power=$LOW_POWER)"
+  log "lidocaine ON (power=$(power_source), battery=$(batt_percent)%, temp=$(batt_temp)°C, thermal=$(thermal_pressure), limit=${HOURS}h, min-battery=${MIN_BATTERY}%, max-temp=${MAX_BATT_TEMP}°C, low-power=$LOW_POWER)"
   [ -t 1 ] && echo "You can close the lid now. Ctrl+C here, or 'lidocaine off' from any terminal, restores normal sleep."
 
   while :; do
@@ -719,30 +716,42 @@ run_watchdog() {
     if [ "$deadline" -gt 0 ] && [ "$now" -ge "$deadline" ]; then
       STOP_REASON="time limit reached"; SLEEP_AFTER=1; STOP_PHONE=1; exit 0
     fi
-    if [ "$(cat "$UNTIL_DONE_FILE" 2>/dev/null)" = 1 ]; then
-      busy=$(agents_busy)
-      echo "${busy:-0}" > "$AGENTS_FILE"
-      if [ "${busy:-0}" -gt 0 ]; then
-        idle_since=0
-        rm -f "$WAIT_TASK_FILE"
-      elif [ "$idle_since" = 0 ]; then
+    # Awake while an agent works, phone access is on, or the lid is open.
+    # Otherwise, after IDLE_MINUTES of quiet, rest: allow sleep and sleep now,
+    # unless a scheduled task is due before the time limit (then stay up for it).
+    busy=$(agents_busy)
+    echo "${busy:-0}" > "$AGENTS_FILE"
+    if [ "${busy:-0}" -gt 0 ] || remote_pid >/dev/null || ! lid_closed; then
+      idle_since=0
+      rm -f "$WAIT_TASK_FILE"
+      if [ "$resting" = 1 ]; then
+        resting=0
+        rm -f "$REST_FILE"
+        SESSION_START=$now
+        log "awake again (lid=$(lid_state), agents=${busy:-0})"
+      fi
+    elif [ "$resting" = 0 ]; then
+      if [ "$idle_since" = 0 ]; then
         idle_since=$now
       elif [ $((now - idle_since)) -ge $((IDLE_MINUTES * 60)) ]; then
-        # Done, unless a scheduled task is due before the time limit: then
-        # stay up for it, and sleep once it has run.
         wait_task=$(next_scheduled_run "$deadline")
         if [ -n "$wait_task" ]; then
           echo "$wait_task" > "$WAIT_TASK_FILE"
         else
-          STOP_REASON="agents finished"; SLEEP_AFTER=1; STOP_PHONE=1; exit 0
+          resting=1
+          idle_since=0
+          echo "$now" > "$REST_FILE"
+          is_root && chmod 644 "$REST_FILE"
+          write_report "nothing running"
+          SESSION_START=""
+          priv /usr/bin/pmset -a disablesleep 0
+          log "resting: lid closed, no agent working for ${IDLE_MINUTES} min, no phone access. Sleeping; opening the lid wakes it"
+          priv /usr/bin/pmset sleepnow >/dev/null
         fi
       fi
-      echo "$idle_since" > "$IDLE_SINCE_FILE"
-    else
-      idle_since=0
-      rm -f "$IDLE_SINCE_FILE" "$AGENTS_FILE" "$WAIT_TASK_FILE"
     fi
-    if [ "$(sleep_disabled)" != 1 ]; then
+    echo "$idle_since" > "$IDLE_SINCE_FILE"
+    if [ "$resting" = 0 ] && [ "$(sleep_disabled)" != 1 ]; then
       priv /usr/bin/pmset -a disablesleep 1
     fi
     beat=$((beat + INTERVAL))
@@ -1101,6 +1110,11 @@ cmd_status() {
   sd=$(sleep_disabled)
   if pid=$(running_pid); then
     echo "Session:          running (pid $pid)"
+    if [ -s "$REST_FILE" ]; then
+      echo "Resting:          since $(date -r "$(cat "$REST_FILE")" '+%H:%M'), nothing was running. Opening the lid wakes it."
+    else
+      echo "Agents working:   $(cat "$AGENTS_FILE" 2>/dev/null || echo 0) (rests $IDLE_MINUTES min after the last one, with the lid closed and phone access off)"
+    fi
     f=$(session_deadline)
     case "$f" in 0) echo "Stops:            no time limit" ;;
       ''|*[!0-9]*) echo "Stops:            not known" ;;
@@ -1150,13 +1164,11 @@ cmd_state() {
     echo "deadline=$(session_deadline)"
     [ -f "$DEADLINE_FILE" ] || echo "deadline_fixed=1"
     echo "started=$(session_start)"
-    if [ "$(cat "$UNTIL_DONE_FILE" 2>/dev/null)" = 1 ]; then
-      echo "until_done=1"
-      echo "idle_minutes=$IDLE_MINUTES"
-      echo "idle_since=$(cat "$IDLE_SINCE_FILE" 2>/dev/null)"
-      echo "agents=$(cat "$AGENTS_FILE" 2>/dev/null || echo 0)"
-      [ -s "$WAIT_TASK_FILE" ] && echo "wait_task=$(cat "$WAIT_TASK_FILE")"
-    fi
+    echo "idle_minutes=$IDLE_MINUTES"
+    echo "idle_since=$(cat "$IDLE_SINCE_FILE" 2>/dev/null)"
+    echo "agents=$(cat "$AGENTS_FILE" 2>/dev/null || echo 0)"
+    [ -s "$WAIT_TASK_FILE" ] && echo "wait_task=$(cat "$WAIT_TASK_FILE")"
+    [ -s "$REST_FILE" ] && echo "resting_since=$(cat "$REST_FILE")"
   else
     echo "running=0"
     echo "last_stop=$(tail -n 30 "$LOG" 2>/dev/null | sed -n 's/^[0-9-]* \([0-9][0-9]:[0-9][0-9]\):[0-9][0-9] normal sleep restored (\(.*\))$/\1|\2/p' | tail -1)"
@@ -1229,10 +1241,7 @@ case "${1:-}" in
   next-task) t=$(next_scheduled_run "${2:-0}"); [ -n "$t" ] && date -r "$t" "+%F %H:%M" || echo "none" ;;
   report) cmd_report "${2:-}" "${3:-}" ;;
   until-done)
-    case "${2:-}" in on) v=1 ;; off) v=0 ;; *) echo "Usage: lidocaine until-done on|off" >&2; exit 2 ;; esac
-    running_pid >/dev/null || { echo "Lidocaine is off; use: lidocaine on --until-done" >&2; exit 1; }
-    echo "$v" > "$UNTIL_DONE_FILE"
-    if [ "$v" = 1 ]; then echo "Sleeps $IDLE_MINUTES minutes after the last agent finishes."; else echo "Agent watching off; the time limit decides."; fi ;;
+    echo "Always on now: the Mac rests when the lid is closed, no agent has worked for $IDLE_MINUTES minutes and phone access is off; opening the lid wakes it." ;;
   -h|--help|help|"") usage ;;
   *) echo "Unknown command: $1" >&2; usage; exit 2 ;;
 esac; exit
